@@ -1,0 +1,11 @@
+;; The fakes the scripts see: who exists, what the ESVs hold, what the outside HTTP services answer.
+;; A :match ending in * is a prefix. An HTTP call with no fake here answers 599, loudly.
+{:default-journey "Login"
+ :users {"alice"   {:password "alice-pw"   :attrs {"mail" ["alice@example.com"] "role" ["staff"]}}
+         "bob"     {:password "bob-pw"     :attrs {"mail" ["bob@example.org"] "role" ["customer"]}}
+         "mallory" {:password "mallory-pw" :attrs {"mail" ["mallory@example.org"] "role" ["customer"]}}}
+ :esv {"esv.corp.network.prefix" "10.0."
+       "esv.demo.otp" "123456"}
+ :managed {"alice" {:givenName "Alice" :accountStatus "active"}}
+ :http [{:match "https://risk.example.test/score?user=mallory*" :response {:status 200 :body {:score 95}}}
+        {:match "https://risk.example.test/score*" :response {:status 200 :body {:score 12}}}]}

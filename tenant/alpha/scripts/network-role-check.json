@@ -1,0 +1,9 @@
+{
+  "_id": "f54c1580-0ef1-4691-8e5b-c2f7228703b9",
+  "context": "AUTHENTICATION_TREE_DECISION_NODE",
+  "default": false,
+  "description": "Staff on the corporate network step up, customers pass, risky users are denied",
+  "evaluatorVersion": "2.0",
+  "language": "JAVASCRIPT",
+  "name": "network-role-check"
+}
