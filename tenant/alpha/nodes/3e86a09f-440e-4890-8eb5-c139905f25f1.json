@@ -1,0 +1,19 @@
+{
+  "_id": "3e86a09f-440e-4890-8eb5-c139905f25f1",
+  "_type": {
+    "_id": "ScriptedDecisionNode",
+    "version": "1.0"
+  },
+  "inputs": [
+    "*"
+  ],
+  "outcomes": [
+    "staff",
+    "customer",
+    "denied"
+  ],
+  "outputs": [
+    "*"
+  ],
+  "script": "f54c1580-0ef1-4691-8e5b-c2f7228703b9"
+}

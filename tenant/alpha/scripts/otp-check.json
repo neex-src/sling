@@ -1,0 +1,9 @@
+{
+  "_id": "6088b6ba-a712-46ac-b3cd-c50612f0a24c",
+  "context": "AUTHENTICATION_TREE_DECISION_NODE",
+  "default": false,
+  "description": "One-time code from a text input callback",
+  "evaluatorVersion": "2.0",
+  "language": "JAVASCRIPT",
+  "name": "otp-check"
+}

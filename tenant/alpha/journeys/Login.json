@@ -1,0 +1,54 @@
+{
+  "_id": "Login",
+  "enabled": true,
+  "entryNodeId": "04a32468-8759-454a-85a0-d6f96ecf4a59",
+  "innerTreeOnly": false,
+  "mustRun": false,
+  "noSession": false,
+  "nodes": {
+    "04a32468-8759-454a-85a0-d6f96ecf4a59": {
+      "connections": {
+        "outcome": "d7390016-6797-4994-8f89-2cae0f335198"
+      },
+      "displayName": "Username Collector",
+      "nodeType": "UsernameCollectorNode",
+      "version": "2.0"
+    },
+    "3e86a09f-440e-4890-8eb5-c139905f25f1": {
+      "connections": {
+        "customer": "70e691a5-1e33-4ac3-a356-e7b6d60d92e0",
+        "denied": "e301438c-0bd0-429c-ab0c-66126501069a",
+        "staff": "47b4ffdc-b42b-4b5a-acd0-c7dfafa3c3e6"
+      },
+      "displayName": "Network and role check",
+      "nodeType": "ScriptedDecisionNode",
+      "version": "1.0"
+    },
+    "47b4ffdc-b42b-4b5a-acd0-c7dfafa3c3e6": {
+      "connections": {
+        "false": "e301438c-0bd0-429c-ab0c-66126501069a",
+        "true": "70e691a5-1e33-4ac3-a356-e7b6d60d92e0"
+      },
+      "displayName": "Staff MFA",
+      "nodeType": "InnerTreeEvaluatorNode",
+      "version": "1.0"
+    },
+    "51316875-2930-4526-a74b-0754ce3f0dcf": {
+      "connections": {
+        "false": "e301438c-0bd0-429c-ab0c-66126501069a",
+        "true": "3e86a09f-440e-4890-8eb5-c139905f25f1"
+      },
+      "displayName": "Data Store Decision",
+      "nodeType": "DataStoreDecisionNode",
+      "version": "1.0"
+    },
+    "d7390016-6797-4994-8f89-2cae0f335198": {
+      "connections": {
+        "outcome": "51316875-2930-4526-a74b-0754ce3f0dcf"
+      },
+      "displayName": "Password Collector",
+      "nodeType": "PasswordCollectorNode",
+      "version": "1.0"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "_id": "StaffMfa",
+  "enabled": true,
+  "entryNodeId": "44701047-1e77-435f-8c94-ed540ae2d6c1",
+  "innerTreeOnly": true,
+  "mustRun": false,
+  "noSession": false,
+  "nodes": {
+    "44701047-1e77-435f-8c94-ed540ae2d6c1": {
+      "connections": {
+        "false": "e301438c-0bd0-429c-ab0c-66126501069a",
+        "true": "70e691a5-1e33-4ac3-a356-e7b6d60d92e0"
+      },
+      "displayName": "One-time code",
+      "nodeType": "ScriptedDecisionNode",
+      "version": "1.0"
+    }
+  }
+}

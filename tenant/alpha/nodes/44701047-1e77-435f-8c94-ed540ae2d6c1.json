@@ -1,0 +1,18 @@
+{
+  "_id": "44701047-1e77-435f-8c94-ed540ae2d6c1",
+  "_type": {
+    "_id": "ScriptedDecisionNode",
+    "version": "1.0"
+  },
+  "inputs": [
+    "*"
+  ],
+  "outcomes": [
+    "true",
+    "false"
+  ],
+  "outputs": [
+    "*"
+  ],
+  "script": "6088b6ba-a712-46ac-b3cd-c50612f0a24c"
+}
