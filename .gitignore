@@ -1,0 +1,8 @@
+.scratch/
+.worktrees/
+.cpcache/
+.nrepl-port
+.repl-tap.log
+.lsp/
+.clj-kondo/.cache/
+target/
