@@ -435,3 +435,18 @@
       (is (not (contains? (set (map :__NAME__ (in-db))) "off"))))
     (testing "GET /sling/sync shows what happened"
       (is (seq (get-in (call "GET" "/sling/sync") [:body :result]))))))
+
+(deftest console-made-correlation
+  (testing "an expression tree from the admin console correlates without its UI script"
+    (swap! (:tenant *srv*) update :mappings
+           (fn [ms] (mapv #(if (= "alphaUser_systemHrdbAccount" (:name %))
+                             (assoc % :correlationQuery [{:expressionTree {:all ["__NAME__"]} :file "ui/correlateTreeToQueryFilter.js"
+                                                          :linkQualifier "default" :type "text/javascript"}])
+                             %) ms)))
+    (let [bearer {"Authorization" "Bearer local-dev"}]
+      (idm/create! (:idm *srv*) "system/HRDB/__ACCOUNT__" {:__NAME__ "toma" :email "old@hr.test"})
+      (call "POST" "/openidm/managed/alpha_user" :query {"_action" "create"} :headers bearer
+            :body {:userName "toma" :mail "toma@members.test" :accountStatus "active"})
+      (is (= [["toma" "toma@members.test"]]
+             (mapv (juxt :__NAME__ :email) (vals (get @(:idm *srv*) "system/HRDB/__ACCOUNT__"))))
+          "found the existing row and updated it, no second row"))))

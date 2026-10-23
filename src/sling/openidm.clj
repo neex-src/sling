@@ -149,12 +149,28 @@
       (string? a) a
       :else (str (mapping-script env ctx depth mapping (str situation " action") a (assoc vars :situation situation))))))
 
+(declare build-target)
+
+(defn- tree->filter
+  "The console's correlation expression tree ({:all [fields]} / {:any [...]}, nested) as a query
+  filter on the target, comparing each target field with the value the mapping would give it."
+  [tree t]
+  (let [[op items] (first tree)
+        part #(if (map? %) (str "(" (tree->filter % t) ")")
+                  (str (name %) " eq " (cheshire.core/generate-string (str (get t (keyword %))))))]
+    (str/join (if (= :any op) " or " " and ") (map part items))))
+
 (defn- correlate
-  "Targets a correlation query finds for `source` (a script returning {_queryFilter ...}); none without one."
+  "Targets a correlation query finds for `source`: a script returning {_queryFilter ...}, or the
+  console's expression tree; none without either."
   [env ctx depth mapping source]
   (let [q (:correlationQuery mapping)
         q (if (sequential? q) (first q) q)]
-    (when (and q (:source q))
+    (cond
+      (:expressionTree q)
+      (let [t (build-target env ctx depth mapping source)]
+        (:result (idm/query (:idm env) (store-type (:target mapping)) {"_queryFilter" (tree->filter (:expressionTree q) t)})))
+      (:source q)
       (let [params (mapping-script env ctx depth mapping "correlationQuery" q {:source source :linkQualifier "default"})]
         (:result (idm/query (:idm env) (store-type (:target mapping)) (update-vals (update-keys params name) str)))))))
 

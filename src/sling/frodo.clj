@@ -163,6 +163,52 @@
     (println "decision scripts:" (count scripts) "-" (count (filter :runs? scripts)) "next-generation ones run,"
              (count (remove :runs? scripts)) "do not (" (str/join ", " (distinct (mapcat :why (remove :runs? scripts)))) ")")))
 
+;; ---- IDM coverage --------------------------------------------------------------------------
+
+(def ^:private modelled-actions #{"external/rest call" "external/email send" "external/email sendTemplate"})
+
+(defn- idm-script-report
+  "What one IDM script needs: language, the openidm actions it calls, Java or require use."
+  [what {:keys [type source file expressionTree]}]
+  (let [src (or source "")
+        file (when-not expressionTree file)
+        actions (for [[_ res act] (re-seq #"openidm\.action\(\s*[\"']([^\"']+)[\"']\s*,\s*[\"']([^\"']+)[\"']" src)]
+                  (str (str/replace res #"/[^/]*$" (if (str/starts-with? res "external/") (str "/" (last (str/split res #"/"))) "")) " " act))
+        resources (distinct (map second (re-seq #"openidm\.\w+\(\s*[\"']([a-z]+/[\w-]+)" src)))
+        why (concat (when (and type (not= type "text/javascript")) [(str "language " type)])
+                    (when (and (str/blank? src) file) [(str "source in file " file ", not in the export")])
+                    (for [a (distinct actions) :when (not (modelled-actions a))
+                          :when (not (str/starts-with? a "endpoint"))] (str "action " a))
+                    (for [r resources :when (not (re-find #"^(managed|system|endpoint|external)/" r))] (str "resource " r))
+                    (when (re-find #"\brequire\(" src) ["require()"])
+                    (when (re-find #"\b(Packages|java\.|org\.forgerock\.)" src) ["Java classes"]))]
+    {:what what :runs? (empty? why) :why (vec (distinct why))}))
+
+(defn idm-coverage [t]
+  (concat
+   (for [[n cfg] (sort-by key (:idm-endpoints t))] (idm-script-report (str "endpoint/" n) cfg))
+   (for [[type o] (sort-by key (:managed-schemas t))
+         [hook cfg] (sort-by key (select-keys o [:onCreate :postCreate :onUpdate :postUpdate :onDelete :postDelete
+                                                 :onRead :onRetrieve :onValidate :onStore :onSync]))]
+     (idm-script-report (str "managed/" type " " (name hook)) cfg))
+   (for [m (sort-by :name (:mappings t))
+         [what cfg] (concat (keep (fn [k] (when-let [c (get m k)] [(name k) (if (sequential? c) (first c) c)]))
+                                  [:validSource :validTarget :onCreate :onUpdate :onDelete :onLink :onUnlink :result :correlationQuery])
+                            (for [p (:properties m) k [:transform :condition] :when (map? (get p k))] [(str (name k) " of " (:target p)) (get p k)])
+                            (for [p (:policies m) :when (map? (:action p))] [(str (:situation p) " action") (:action p)]))]
+     (idm-script-report (str "mapping " (:name m) " " what) cfg))))
+
+(defn print-idm-coverage [t]
+  (let [rows (idm-coverage t)]
+    (doseq [{:keys [what runs? why]} rows]
+      (println (format "%-60s %s" what (if runs? "RUNS" (str "BLOCKED " (str/join "; " why))))))
+    (println)
+    (println (count (filter :runs? rows)) "of" (count rows) "IDM scripts (endpoints, managed object scripts, mapping scripts) run here.")
+    (println "mappings:" (str/join ", " (for [m (:mappings t)] (str (:name m) " (" (:source m) " -> " (:target m) ")"))))))
+
 (defn -main [root & [realm]]
-  (print-coverage (load-tenant root (or realm "alpha")))
+  (let [t (load-tenant root (or realm "alpha"))]
+    (print-coverage t)
+    (println)
+    (print-idm-coverage t))
   (shutdown-agents))
