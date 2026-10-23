@@ -202,6 +202,31 @@
                    (am/environment (:tenant srv) req (nth m 1) (nth m 2))
                    (deny srv req))))))))
 
+;; ---- CORS ----------------------------------------------------------------------------------
+
+(defn- origin-allowed?
+  "An SPA's origin may call with credentials: those in :cors-origins, or by default any page
+  served from localhost / 127.0.0.1, which is where a developer's SPA runs."
+  [{:keys [opts]} origin]
+  (when origin
+    (if-let [allowed (:cors-origins opts)]
+      (contains? (set allowed) origin)
+      (boolean (re-matches #"https?://(localhost|127\.0\.0\.1)(:\d+)?" origin)))))
+
+(defn with-cors
+  "Answer preflights and add the CORS headers a browser needs for fetch(..., {credentials: 'include'})."
+  [srv req respond]
+  (let [origin (web/header req "origin")
+        ok? (origin-allowed? srv origin)
+        headers (when ok? {"Access-Control-Allow-Origin" origin "Access-Control-Allow-Credentials" "true"
+                           "Vary" "Origin" "Access-Control-Expose-Headers" "Location, Content-Type"})]
+    (if (and (= "OPTIONS" (:method req)) (web/header req "access-control-request-method"))
+      {:status (if ok? 204 403) :body ""
+       :headers (merge headers (when ok? {"Access-Control-Allow-Methods" "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+                                          "Access-Control-Allow-Headers" (or (web/header req "access-control-request-headers") "*")
+                                          "Access-Control-Max-Age" "600"}))}
+      (update (respond) :headers merge headers))))
+
 ;; ---- the socket ----------------------------------------------------------------------------
 
 (defn- ->request [^HttpExchange ex]
@@ -240,6 +265,7 @@
     :services nil (path of a services.edn to use instead of <dir>/services.edn)
     :modules all-modules  :public-url \"http://127.0.0.1:<port>\"  :token-format :jwt | :opaque
     :cookie-name \"iPlanetDirectoryPro\"  :dev-token \"local-dev\"  :access-ttl 3600
+    :cors-origins nil (SPA origins allowed to call with credentials; default any localhost page)
   Returns the server map (atoms :tenant :sessions :sso :tokens :codes :idm); stop with (stop! it)."
   [{:keys [port bind dir realm frodo services] :or {port 8080 bind "127.0.0.1" dir "tenant" realm "alpha"} :as o}]
   (let [http (HttpServer/create (InetSocketAddress. ^String bind (int port)) 0)
@@ -261,8 +287,9 @@
              :key (jwt/new-key) :dir (when-not frodo dir) :realm realm :opts opts}]
     (.createContext http "/" (reify HttpHandler
                                (handle [_ ex]
-                                 (send! ex (try (handle srv (->request ex))
-                                                (catch Throwable e (web/error 500 (str e))))))))
+                                 (send! ex (let [req (->request ex)]
+                                             (try (with-cors srv req #(handle srv req))
+                                                  (catch Throwable e (web/error 500 (str e)))))))))
     (.start http)
     (assoc srv :server http :port port)))
 
@@ -270,7 +297,7 @@
 
 (defn- cli-opts
   "--port 8080 --bind 127.0.0.1 --dir tenant --frodo <export> --services <edn> --modules oauth,idm --realm alpha
-  --token-format jwt|opaque --public-url <url> --cookie-name <name>; bare args are port then dir."
+  --token-format jwt|opaque --public-url <url> --cookie-name <name> --cors-origins <o1,o2>; bare args are port then dir."
   [args]
   (loop [[a b & more :as as] args o {} bare []]
     (cond
@@ -279,8 +306,9 @@
       :else (recur (rest as) o (conj bare a)))))
 
 (defn -main [& args]
-  (let [{:keys [port modules token-format] :as o} (cli-opts args)
+  (let [{:keys [port modules token-format cors-origins] :as o} (cli-opts args)
         s (start! (cond-> (assoc o :port (Integer/parseInt (or port "8080")))
+                    cors-origins (assoc :cors-origins (str/split cors-origins #","))
                     modules (assoc :modules (set (map keyword (str/split modules #","))))
                     token-format (assoc :token-format (keyword token-format))))]
     (println "sling fake tenant on" (get-in s [:opts :public-url])
