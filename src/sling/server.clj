@@ -29,6 +29,7 @@
             [sling.frodo :as frodo]
             [sling.idm :as idm]
             [sling.jwt :as jwt]
+            [sling.mfa]
             [sling.oauth :as oauth]
             [sling.openidm :as openidm]
             [sling.store :as store]
@@ -85,15 +86,24 @@
         journey (if (= "service" (web/param req "authIndexType"))
                   (web/param req "authIndexValue")
                   (or (get-in t [:services :default-journey]) "Login"))
-        res (if (:authId in)
+        suspended-id (web/param req "suspendedId")
+        res (cond
+              suspended-id
+              (if-let [s (get @sessions (str "suspended:" suspended-id))]
+                (do (swap! sessions dissoc (str "suspended:" suspended-id)) (engine/resume-suspended t s))
+                {:status :failure :reason "unknown or used suspendedId" :session nil})
+              (:authId in)
               (if-let [s (get @sessions (:authId in))]
                 (engine/resume t s (:callbacks in))
                 {:status :failure :reason "unknown or expired authId" :session nil})
+              :else
               (engine/start t journey {:headers (:headers req) :parameters (:query req) :cookies (web/cookies req)}))
         dbg (when debug? {:_sling {:reason (:reason res) :trace (get-in res [:session :trace])
                                         :sessionProperties (get-in res [:session :props])}})]
     (when (and (:authId in) (not= :callbacks (:status res))) (swap! sessions dissoc (:authId in)))
     (case (:status res)
+      :suspended (do (swap! sessions assoc (str "suspended:" (get-in res [:suspend :id])) (:session res))
+                     (web/json 200 (merge {:authId (str (UUID/randomUUID)) :callbacks (:callbacks res)} dbg)))
       :callbacks (let [id (str (UUID/randomUUID))]
                    (swap! sessions assoc id (:session res))
                    (web/json 200 (merge {:authId id :callbacks (:callbacks res)} dbg)))
@@ -280,7 +290,7 @@
         env {:tenant tenant :idm idm}
         internal {:security {:authenticationId "sling" :authorization {:id "sling" :component "internal/user"
                                                                              :roles ["internal/role/openidm-admin"]}}}
-        _ (swap! tenant update :services assoc :idm idm :realm realm :outbox (atom [])
+        _ (swap! tenant update :services assoc :idm idm :realm realm :outbox (atom []) :public-url (:public-url opts)
                  :openidm (fn [op args] (openidm/dispatch env internal 0 op args)))
         srv {:tenant tenant :openidm env
              :sessions (atom {}) :sso (atom {}) :tokens (atom {}) :codes (atom {}) :idm idm

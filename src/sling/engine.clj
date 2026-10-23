@@ -7,7 +7,8 @@
   ScriptedDecisionNode, InnerTreeEvaluatorNode, plus the Success and Failure terminals.
   Any other nodeType fails the journey and says so: nothing is silently skipped.
 
-  Results: {:status :callbacks|:success|:failure, :callbacks [wire], :session s, :reason str}.
+  Results: {:status :callbacks|:suspended|:success|:failure, :callbacks [wire], :session s, :reason str}.
+  A node may suspend the journey ({:suspend {:id :message}}); resume-suspended picks it up again.
   Wire callbacks have the shape /json/authenticate sends (type, output[], input[] named IDTokenN)."
   (:require [sling.idm :as idm]
             [sling.script :as script]))
@@ -159,6 +160,14 @@
                   (:error r) (fail (update s :trace (fnil conj []) {:journey (:journey s) :node name :error (:error r)})
                                    (str name ": " (:error r)))
 
+                  (:suspend r)
+                  (let [s' (-> s (update :shared merge (:shared r)) (update :transient merge (:transient r))
+                               (assoc :pending nil)
+                               (dissoc :resumed))]
+                    {:status :suspended :suspend (:suspend r) :session s'
+                     :callbacks (wire [{:type "SuspendedTextOutputCallback"
+                                        :args {:output {:message (get-in r [:suspend :message]) :messageType "0"} :output-only true}}])})
+
                   (:callbacks r)
                   (let [s' (-> s (update :shared merge (:shared r)) (update :transient merge (:transient r))
                                (assoc :pending (:callbacks r)))]
@@ -193,6 +202,11 @@
   "Continue a session that is waiting for callbacks. `client` is the callbacks array the client posted back."
   [t session client]
   (advance t session (answers (:pending session) client)))
+
+(defn resume-suspended
+  "Continue a session a node suspended (Email Suspend): that node runs again and sees :resumed."
+  [t session]
+  (advance t (assoc session :resumed true) nil))
 
 (defn answer
   "Test helper: fill the first input of each wire callback in order from `values`, in the client's JSON shape."

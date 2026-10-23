@@ -9,6 +9,7 @@
             [sling.frodo :as frodo]
             [sling.idm :as idm]
             [sling.jwt :as jwt]
+            [sling.mfa :as mfa]
             [sling.server :as server]
             [sling.web :as web])
   (:import (java.security MessageDigest)
@@ -52,7 +53,7 @@
 
 (deftest frodo-export-is-the-tenant
   (let [t (frodo/load-tenant export "alpha")]
-    (is (= #{"PlatformLogin" "Preferences"} (set (keys (:trees t)))))
+    (is (= #{"PlatformLogin" "Preferences" "OathLogin" "EmailOtp" "ResetPassword"} (set (keys (:trees t)))))
     (is (= "members.test" (get-in t [:services :esv "esv.member.domain"])))
     (is (= #{"orders-web" "orders-service"} (set (keys (:clients t)))))
     (is (every? :runnable? (frodo/coverage t)) "every fixture journey uses only modelled nodes and next-generation scripts")))
@@ -285,3 +286,61 @@
           (is (= 501 (:status r)))
           (is (re-find #"groovy, which sling does not run" (get-in r [:body :message])))))
       (finally (.stop svc 0)))))
+
+(defn- drive
+  "Run journey `j` (nil: start from `query` as given), answering each round with (answer callbacks)
+  -> values for the inputs. Returns the last response with :rounds (the callback types seen)."
+  [query answer]
+  (loop [r (call "POST" auth :query query :headers {"X-Sling-Debug" "true"}) rounds []]
+    (let [cbs (get-in r [:body :callbacks])]
+      (if (and cbs (not= "SuspendedTextOutputCallback" (:type (first cbs))) (< (count rounds) 10))
+        (recur (call "POST" auth :headers {"X-Sling-Debug" "true"}
+                     :body {:authId (get-in r [:body :authId]) :callbacks (engine/answer cbs (answer cbs))})
+               (conj rounds (mapv :type cbs)))
+        (assoc r :rounds (conj rounds (mapv :type cbs)))))))
+
+(defn- outbox [] @(get-in @(:tenant *srv*) [:services :outbox]))
+(defn- svc [j] {"authIndexType" "service" "authIndexValue" j})
+
+(deftest oath-totp
+  (let [answer (fn [code] (fn [cbs]
+                            (case (mapv :type cbs)
+                              ["NameCallback" "PasswordCallback"] ["ana" "Ana-pw-123"]
+                              ["TextOutputCallback" "HiddenValueCallback" "ConfirmationCallback"] [(get-in cbs [1 :output 0 :value]) 0]
+                              ["NameCallback"] [(code)])))
+        secret #(:secret (last (filter (comp #{"oath-registration"} :kind) (outbox))))]
+    (testing "first time: register (the QR's otpauth URI is in the hidden value), then a real TOTP code"
+      (let [r (drive (svc "OathLogin") (answer #(mfa/totp (secret))))]
+        (is (= 200 (:status r)))
+        (is (= [["NameCallback" "PasswordCallback"] ["TextOutputCallback" "HiddenValueCallback" "ConfirmationCallback"] ["NameCallback"]]
+               (butlast (:rounds r))))
+        (is (str/starts-with? (:uri (last (outbox))) "otpauth://totp/sling:ana?secret="))))
+    (testing "next time straight to the code; a wrong one fails"
+      (let [r (drive (svc "OathLogin") (answer #(mfa/totp (secret))))]
+        (is (= [["NameCallback" "PasswordCallback"] ["NameCallback"]] (butlast (:rounds r))))
+        (is (= 200 (:status r))))
+      (is (= 401 (:status (drive (svc "OathLogin") (answer (constantly "000000")))))))))
+
+(deftest email-otp
+  (let [answer (fn [wrong?] (fn [cbs] (if (= 2 (count cbs)) ["dan" "Dan-pw-123"]
+                                          [(if wrong? "nope" (:otp (last (outbox))))])))]
+    (is (= 200 (:status (drive (svc "EmailOtp") (answer false)))))
+    (is (= {:kind "email" :to "dan@elsewhere.test" :subject "Your code"} (select-keys (last (outbox)) [:kind :to :subject])))
+    (is (re-find #"^Your code is \d{6}\.$" (:body (last (outbox)))))
+    (is (= 401 (:status (drive (svc "EmailOtp") (answer true)))))))
+
+(deftest reset-password-by-mail-link
+  (let [r (drive (svc "ResetPassword") (constantly ["ana"]))
+        mail (last (outbox))
+        sid (second (re-find #"suspendedId=(\w+)" (:resumeURI mail)))]
+    (testing "the journey stops and says so; the link is in the mail"
+      (is (= "SuspendedTextOutputCallback" (get-in r [:body :callbacks 0 :type])))
+      (is (= ["ana@members.test" "Reset your password"] [(:to mail) (:subject mail)]))
+      (is (str/includes? (:body mail) "Hello Ana")))
+    (testing "the link resumes it, the new password is saved, and works"
+      (let [r2 (call "POST" auth :query {"suspendedId" sid})
+            cbs (get-in r2 [:body :callbacks])]
+        (is (= ["ValidatedCreatePasswordCallback"] (mapv :type cbs)))
+        (is (= 200 (:status (call "POST" auth :body {:authId (get-in r2 [:body :authId]) :callbacks (engine/answer cbs ["New-pw-456"])}))))
+        (is (= 200 (:status (login* "ana" "New-pw-456"))))
+        (is (= 401 (:status (call "POST" auth :query {"suspendedId" sid}))) "a link works once")))))

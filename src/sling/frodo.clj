@@ -17,6 +17,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [sling.engine :as engine]
+            [sling.mfa]
             [sling.nodes]))
 
 (defn- read-json [f] (json/parse-string (slurp f) true))

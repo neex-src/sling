@@ -108,7 +108,8 @@ input,select{width:100%;padding:.5rem;font:inherit}button{margin-top:1rem;paddin
 .msg{color:#a33}.note{color:#666;font-size:.85rem}</style>
 <h1>Sign in</h1><p class=note>sling fake tenant, realm " realm "</p><form id=f></form><p class=msg id=m></p>
 <script>
-const url='/am/json/realms/root/realms/" realm "/authenticate" (when journey (str "?authIndexType=service&authIndexValue=" journey)) "';
+const sid=new URLSearchParams(location.search).get('suspendedId');
+const url='/am/json/realms/root/realms/" realm "/authenticate'+(sid?'?suspendedId='+encodeURIComponent(sid):'" (when journey (str "?authIndexType=service&authIndexValue=" journey)) "');
 const goto=new URLSearchParams(location.search).get('goto');
 let state=null;
 async function post(body){
@@ -119,7 +120,7 @@ function render(s){
   state=s; const f=document.getElementById('f'); f.innerHTML='';
   s.callbacks.forEach((c,i)=>{
     const o=Object.fromEntries((c.output||[]).map(x=>[x.name,x.value]));
-    if(c.type==='TextOutputCallback'){const p=document.createElement('p');p.textContent=o.message;f.appendChild(p);return;}
+    if(c.type==='TextOutputCallback'||c.type==='SuspendedTextOutputCallback'){const p=document.createElement('p');p.textContent=o.message;f.appendChild(p);return;}
     if(!c.input) return;
     const l=document.createElement('label');l.textContent=o.prompt||c.type;f.appendChild(l);
     let el;
