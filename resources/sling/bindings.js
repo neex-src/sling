@@ -115,8 +115,13 @@
   };
 
   var openidm = {
-    read: function (path) { return call("openidm.read", { path: path }); },
-    query: function (path, params) { return call("openidm.query", { path: path, params: params || {} }); }
+    read: function (path, params, fields) { return call("openidm.read", { path: path, params: params, fields: fields }); },
+    query: function (path, params, fields) { return call("openidm.query", { path: path, params: params || {}, fields: fields }); },
+    create: function (path, id, content, params, fields) { return call("openidm.create", { path: path, id: id, content: content, params: params, fields: fields }); },
+    update: function (path, rev, content, params, fields) { return call("openidm.update", { path: path, rev: rev, content: content, params: params, fields: fields }); },
+    patch: function (path, rev, ops, params, fields) { return call("openidm.patch", { path: path, rev: rev, ops: ops, params: params, fields: fields }); },
+    "delete": function (path, rev) { return call("openidm.delete", { path: path, rev: rev }); },
+    action: function (path, action, content, params, fields) { return call("openidm.action", { path: path, action: action, content: content, params: params, fields: fields }); }
   };
   var systemEnv = { getProperty: function (k) { return call("env.get", { key: k }); } };
   var logger = {};

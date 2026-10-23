@@ -15,7 +15,8 @@
   (:require [cheshire.core :as json]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [sling.idm :as idm])
+            [sling.idm :as idm]
+            [sling.outside :as outside])
   (:import (org.graalvm.polyglot Context Engine Source Value)
            (org.graalvm.polyglot.proxy ProxyExecutable)))
 
@@ -27,20 +28,9 @@
 (def ^:private prelude (delay (slurp (io/resource "sling/bindings.js"))))
 (def ^:private legacy-prelude (delay (slurp (io/resource "sling/legacy.js"))))
 
-(defn- match? [m uri]
-  (if (str/ends-with? m "*") (str/starts-with? uri (subs m 0 (dec (count m)))) (= m uri)))
-
-(defn- http-send [{:keys [http]} {:keys [uri options]}]
-  (let [method (str/upper-case (or (:method options) "GET"))
-        hit (first (filter #(and (match? (:match %) uri)
-                                 (or (nil? (:method %)) (= method (str/upper-case (:method %)))))
-                           http))]
-    (if hit
-      (let [{:keys [status body headers]} (:response hit)]
-        {:status (or status 200) :headers (or headers {})
-         :body (if (string? body) body (json/generate-string body))})
-      {:status 599 :statusText "sling: no fake registered" :headers {}
-       :body (str "no fake for " method " " uri)})))
+(defn- http-send [services {:keys [uri options]}]
+  (outside/http services {:uri uri :method (:method options) :headers (:headers options)
+                          :body (let [b (:body options)] (when (some? b) (if (string? b) b (json/generate-string b))))}))
 
 (defn- eq-filter [filter-str]
   (when-let [[_ field v] (re-matches #"/?(\w+) eq '([^']*)'" (str filter-str))]
@@ -52,9 +42,27 @@
         found (if f (filter #(= v (str (get % f))) users) users)]
     {:result (vec found) :resultCount (count found)}))
 
+(declare idm-op*)
+
+(defn- router-op
+  "openidm.* through the server's IDM router (managed object scripts, endpoints, external/*).
+  managed/user means the realm's users, as in journey scripts."
+  [{:keys [openidm realm]} op {:keys [path] :as args}]
+  (when-let [[_ verb] (re-matches #"openidm\.(\w+)" op)]
+    (let [res (str/replace (str path) #"^managed/user(?=/|$)" (str "managed/" realm "_user"))
+          a (-> args (dissoc :path) (assoc :resource res))]
+      (try (openidm verb a)
+           (catch clojure.lang.ExceptionInfo e
+             (if (= 404 (:code (ex-data e))) nil (throw e)))))))
+
 (defn- idm-op
   "The same calls answered from the IDM store the server shares with REST, when there is one."
-  [{:keys [idm realm]} op args]
+  [{:keys [idm realm] :as services} op args]
+  (if (and (:openidm services) (str/starts-with? op "openidm."))
+    (router-op services op args)
+    (idm-op* services op args)))
+
+(defn- idm-op* [{:keys [idm realm]} op args]
   (let [users (str realm "_user")
         attr (fn [u a] (let [x (get u (keyword a))] (cond (nil? x) [] (sequential? x) (vec x) :else [x])))]
     (case op

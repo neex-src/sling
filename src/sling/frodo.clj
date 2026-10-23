@@ -7,7 +7,9 @@
     script/*.script.json        metadata; the source is the file:// neighbour, a string or lines
     oauth2.app/*.json           OAuth2 clients (without secrets: those go in services.edn)
     global/variable/*.json      ESVs, seen by scripts as esv.a.b
-    global/idm/managed/*.json   managed object schemas (the Attribute Collector reads types)
+    global/idm/managed/*.json   managed object schemas and their scripts (onCreate, postUpdate ...)
+    global/idm/endpoint/*.json  custom endpoints (inline source, or a file:// neighbour)
+    global/emailTemplate/*.json email templates (Email Suspend, external/email sendTemplate)
 
   Also `coverage`: for each journey, which node types and scripts sling can run, which it
   cannot and why, so the cost of a real tenant can be read off its export before writing code."
@@ -78,6 +80,15 @@
                                            (some-> (:idm m) vals first :objects))
                                      :when (:name o)]
                                  [(:name o) o]))
+     :idm-endpoints (into {} (for [f (files-ending root ".idm.json") :when (keep? f)
+                                   [id cfg] (:idm (read-json f))
+                                   :let [id (clojure.core/name id)]
+                                   :when (str/starts-with? id "endpoint/")]
+                               [(subs id 9) (cond-> cfg (and (nil? (:source cfg)) (:file cfg))
+                                              (assoc :source (source-of f (str "file://" (:file cfg)))))]))
+     :email-templates (into {} (for [f (files-ending root ".emailTemplate.json") :when (keep? f)
+                                     [id t] (:emailTemplate (read-json f))]
+                                 [(clojure.core/name id) t]))
      :services {:esv (into {} variables) :default-journey "Login"}}))
 
 ;; ---- coverage ------------------------------------------------------------------------------

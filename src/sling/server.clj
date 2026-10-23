@@ -30,6 +30,7 @@
             [sling.idm :as idm]
             [sling.jwt :as jwt]
             [sling.oauth :as oauth]
+            [sling.openidm :as openidm]
             [sling.store :as store]
             [sling.web :as web])
   (:import (com.sun.net.httpserver HttpExchange HttpHandler HttpServer)
@@ -47,6 +48,18 @@
                  (contains? (oauth/scopes-of claims) scope)
                  (oauth/sso-session srv req)
                  (some-> (web/header req "iplanetdirectorypro") (#(get @(:sso srv) %)))))))
+
+(defn- idm-context
+  "The request context an IDM script sees as `context`, from whoever is calling."
+  [srv req realm]
+  (let [claims (some->> (web/bearer req) (oauth/token-claims srv))
+        sso (oauth/sso-session srv req)]
+    {:security {:authenticationId (or (:subname claims) (:username sso) "local-dev")
+                :authorization {:id (or (:sub claims) (:user-id sso) "local-dev")
+                                :component (if (and sso (not claims)) (str "managed/" realm "_user") "internal/user")
+                                :roles (if (and sso (not claims)) ["internal/role/openidm-authorized"] ["internal/role/openidm-admin"])
+                                :scopes (vec (:scope claims))}}
+     :http {:method (:method req) :path (:path req) :headers (update-vals (:headers req) first)}}))
 
 (defn- deny [srv req]
   (if (or (web/bearer req) (web/header req "authorization"))
@@ -146,6 +159,8 @@
      [#"^/am/oauth2(?:/realms/root/realms/([^/]+))?/(.+)$" :oauth :oauth]
      [#"^/am/XUI/?$" :am :login-page]
      [#"^/openidm/managed/([^/]+)(?:/([^/]+))?$" :idm :idm]
+     [#"^/openidm/endpoint/([^/]+)(?:/(.+))?$" :idm :endpoint]
+     [#"^/sling/outbox$" :am :outbox]
      [#"^/environment/(variables|secrets)(?:/([^/]+))?$" :esv :env]]))
 
 (defn handle
@@ -174,8 +189,15 @@
             :empty (if (allowed? srv req "fr:am:*") (web/json 200 {:result [] :resultCount 0}) (deny srv req))
             :themes (if (allowed? srv req "fr:idm:*") (web/json 200 {:_id "ui/themerealm" :realm {(keyword realm) []}}) (deny srv req))
             :idm (if (allowed? srv req "fr:idm:*")
-                   (idm/handle (:idm srv) req (nth m 1) (nth m 2))
+                   (openidm/handle-managed (:openidm srv) (idm-context srv req realm) req (nth m 1) (nth m 2))
                    (deny srv req))
+            ;; end users call custom endpoints too, with their session; the script decides
+            :endpoint (if (allowed? srv req "fr:idm:*")
+                        (openidm/handle-endpoint (:openidm srv) (idm-context srv req realm) req (nth m 1) (nth m 2))
+                        (deny srv req))
+            :outbox (if (= "DELETE" (:method req))
+                      (do (reset! (get-in @(:tenant srv) [:services :outbox]) []) (web/json 200 {:result []}))
+                      (web/json 200 {:result @(get-in @(:tenant srv) [:services :outbox])}))
             :env (if (allowed? srv req "fr:idc:esv:*")
                    (am/environment (:tenant srv) req (nth m 1) (nth m 2))
                    (deny srv req))))))))
@@ -228,7 +250,13 @@
         t (if frodo (frodo/load-tenant frodo realm) (store/load-tenant dir realm))
         t (cond-> t services (update :services merge (edn/read-string (slurp services))))
         idm (seed-identities (:services t) realm)
-        srv {:tenant (atom (update t :services assoc :idm idm :realm realm))
+        tenant (atom t)
+        env {:tenant tenant :idm idm}
+        internal {:security {:authenticationId "sling" :authorization {:id "sling" :component "internal/user"
+                                                                             :roles ["internal/role/openidm-admin"]}}}
+        _ (swap! tenant update :services assoc :idm idm :realm realm :outbox (atom [])
+                 :openidm (fn [op args] (openidm/dispatch env internal 0 op args)))
+        srv {:tenant tenant :openidm env
              :sessions (atom {}) :sso (atom {}) :tokens (atom {}) :codes (atom {}) :idm idm
              :key (jwt/new-key) :dir (when-not frodo dir) :realm realm :opts opts}]
     (.createContext http "/" (reify HttpHandler

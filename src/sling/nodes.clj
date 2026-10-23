@@ -37,6 +37,14 @@
       (or (some->> (get-in session [:shared "_id"]) (idm/read-obj store type))
           (when v (idm/find-by store type (keyword attr) v))))))
 
+(defn- router-call
+  "Write through the IDM router when the server has one, so the managed object scripts run;
+  straight to the store otherwise. A refusal (onValidate throwing, say) is nil."
+  [tenant op args direct]
+  (if-let [r (get-in tenant [:services :openidm])]
+    (try (r op args) (catch clojure.lang.ExceptionInfo _ nil))
+    (direct)))
+
 (defn- no-store [] {:error "this node needs the IDM store: run it through the server, or seed :idm"})
 
 (defn- shared-attrs [session m] {"objectAttributes" (merge (get-in session [:shared "objectAttributes"]) m)})
@@ -166,11 +174,13 @@
   (let [u (the-user ctx)
         ignored (set (map keyword (:ignoredFields config)))
         changes (apply dissoc (obj-attrs session) ignored)]
-    (if (and u (idm-of tenant))
-      (do (idm/patch! (idm-of tenant) (identity-type tenant session config) (:_id u)
-                      (for [[k v] changes] {:operation "replace" :field (str "/" (name k)) :value v}))
-          {:outcome "PATCHED"})
-      {:outcome "FAILURE"})))
+    (let [type (identity-type tenant session config)
+          ops (vec (for [[k v] changes] {:operation "replace" :field (str "/" (name k)) :value v}))]
+      (if (and u (idm-of tenant)
+               (router-call tenant "patch" {:resource (str "managed/" type "/" (:_id u)) :ops ops}
+                            #(idm/patch! (idm-of tenant) type (:_id u) ops)))
+        {:outcome "PATCHED"}
+        {:outcome "FAILURE"}))))
 
 (defmethod engine/run-node "CreateObjectNode" [{:keys [tenant session config]}]
   (if-let [store (idm-of tenant)]
@@ -178,8 +188,10 @@
           type (identity-type tenant session config)]
       (if (or (nil? (:userName attrs)) (idm/find-by store type :userName (:userName attrs)))
         {:outcome "FAILURE"}
-        (let [u (idm/create! store type (merge {:accountStatus "active"} attrs))]
-          {:outcome "CREATED" :shared {"_id" (:_id u) "username" (:userName u)}})))
+        (if-let [u (router-call tenant "create" {:resource (str "managed/" type) :content (merge {:accountStatus "active"} attrs)}
+                                #(idm/create! store type (merge {:accountStatus "active"} attrs)))]
+          {:outcome "CREATED" :shared {"_id" (:_id u) "username" (:userName u)}}
+          {:outcome "FAILURE"})))
     (no-store)))
 
 (defmethod engine/run-node "IncrementLoginCountNode" [{:keys [tenant session config] :as ctx}]

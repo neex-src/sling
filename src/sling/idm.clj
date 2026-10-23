@@ -4,6 +4,8 @@
   the openidm/idRepository bindings of journey scripts and the Data Store Decision node, so a user
   a service creates over REST can log in through a journey a second later.
 
+  sling.openidm puts the REST endpoints and the managed object scripts on top.
+
   The store is an atom {\"alpha_user\" {id object}}. Objects carry :_id and :_rev; `password` is
   kept (it is a fake) but never read back, as on the platform.
 
@@ -11,8 +13,7 @@
   `pr`, and eq co sw lt le gt ge with quoted strings, numbers, booleans and null. String matches
   ignore case, as the directory's default matching rules do; a multi-valued field matches when
   any value does."
-  (:require [clojure.string :as str]
-            [sling.web :as web])
+  (:require [clojure.string :as str])
   (:import (java.util UUID)))
 
 (def private-fields #{:password})
@@ -166,6 +167,11 @@
       "move" (let [v (get-in obj (pointer from))] (-> obj (dissoc (first (pointer from))) (assoc-in p v)))
       (throw (ex-info (str "patch operation " (pr-str operation) " is not supported") {})))))
 
+(defn apply-ops
+  "The object after a list of patch operations (add remove replace increment copy move)."
+  [obj ops]
+  (reduce apply-op obj ops))
+
 (defn patch! [store type id ops]
   (when (read-obj store type id)
     (let [o (-> (reduce apply-op (read-obj store type id) ops) (assoc :_id id))
@@ -183,49 +189,3 @@
   (when-let [o (read-obj store type id)]
     (swap! store update type dissoc id)
     o))
-
-;; ---- REST ----------------------------------------------------------------------------------
-
-(defn handle
-  "/openidm/managed/<type>[/<id>]. `allowed?` is the caller's check of the bearer token."
-  [store req type id]
-  (let [m (:method req)
-        action (web/param req "_action")
-        fields (some-> (web/param req "_fields") (str/split #","))
-        rev-ok? (fn [o] (let [want (web/header req "if-match")]
-                          (or (nil? want) (= want "*") (= want (:_rev o)))))
-        body (delay (web/json-body req))
-        out (fn [status o] (web/json status (public-view o fields)))]
-    (try
-      (cond
-        (and (nil? id) (= m "GET"))
-        (if (web/param req "_queryFilter")
-          (web/json 200 (query store type (update-vals (:query req) first)))
-          (web/error 400 "query requests need _queryFilter (use _queryFilter=true for all)"))
-
-        (and (nil? id) (= m "POST") (contains? #{nil "create"} action))
-        (if (and (:_id @body) (read-obj store type (:_id @body)))
-          (web/error 412 "object already exists")
-          (out 201 (create! store type @body)))
-
-        (nil? id) (web/error 405 (str m " on a collection"))
-
-        (= m "GET") (if-let [o (read-obj store type id)] (out 200 o) (web/error 404 (str "managed/" type "/" id " not found")))
-
-        (= m "PUT") (let [old (read-obj store type id)]
-                      (cond
-                        (and old (= "*" (web/header req "if-none-match"))) (web/error 412 "object already exists")
-                        (and old (not (rev-ok? old))) (web/error 412 "revision does not match")
-                        old (out 200 (replace! store type id @body))
-                        :else (out 201 (create! store type (assoc @body :_id id)))))
-
-        (or (= m "PATCH") (and (= m "POST") (= action "patch")))
-        (if-let [old (read-obj store type id)]
-          (if (rev-ok? old) (out 200 (patch! store type id @body)) (web/error 412 "revision does not match"))
-          (web/error 404 (str "managed/" type "/" id " not found")))
-
-        (= m "DELETE") (if-let [o (delete! store type id)] (out 200 o) (web/error 404 (str "managed/" type "/" id " not found")))
-
-        :else (web/error 405 (str m " " (or action ""))))
-      (catch clojure.lang.ExceptionInfo e
-        (web/error 400 (ex-message e))))))
