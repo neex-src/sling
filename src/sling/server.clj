@@ -112,7 +112,7 @@
       [:nodes "GET"] (if-let [n (get-in t [:nodes (nth args 2)])]
                        (web/json 200 n)
                        (web/error 404 "node not found"))
-      [:nodes "PUT"] (let [[type version id] args
+      [:nodes "PUT"] (let [[type version id] (update args 1 #(or % "1.0"))
                            cfg (web/json-body req)]
                        (if files?
                          (do (store/put-node! dir realm type version id cfg) (reload! srv))
@@ -139,7 +139,9 @@
      [(re-pattern (str pre "authenticate$")) :journeys :authenticate]
      [(re-pattern (str pre "sessions/?$")) :am :sessions]
      [(re-pattern (str tre "trees(?:/([^/]+))?$")) :journeys :trees]
-     [(re-pattern (str tre "nodes/([^/]+)/([^/]+)/([^/]+)$")) :journeys :nodes]
+     [(re-pattern (str tre "nodes/([^/]+)(?:/([0-9.]+))?/([^/]+)$")) :journeys :nodes]
+     [(re-pattern (str pre "realm-config/(federation/circlesoftrust|saml2|services/SocialIdentityProviders)$")) :journeys :empty]
+     [#"^/openidm/config/ui/themerealm$" :journeys :themes]
      [(re-pattern (str pre "scripts(?:/([^/]+))?$")) :journeys :scripts]
      [#"^/am/oauth2(?:/realms/root/realms/([^/]+))?/(.+)$" :oauth :oauth]
      [#"^/am/XUI/?$" :am :login-page]
@@ -168,6 +170,9 @@
                                        (deny srv req))
             :oauth (oauth/handle srv req (or (second m) (web/param req "realm") "root") (nth m 2))
             :login-page (am/login-page req)
+            ;; what a journey export also reads; this tenant has none of them
+            :empty (if (allowed? srv req "fr:am:*") (web/json 200 {:result [] :resultCount 0}) (deny srv req))
+            :themes (if (allowed? srv req "fr:idm:*") (web/json 200 {:_id "ui/themerealm" :realm {(keyword realm) []}}) (deny srv req))
             :idm (if (allowed? srv req "fr:idm:*")
                    (idm/handle (:idm srv) req (nth m 1) (nth m 2))
                    (deny srv req))
@@ -234,7 +239,22 @@
 
 (defn stop! [{:keys [server]}] (.stop ^HttpServer server 0))
 
-(defn -main [& [port dir]]
-  (let [s (start! {:port (Integer/parseInt (or port "8080")) :dir (or dir "tenant")})]
-    (println "sling fake tenant on" (get-in s [:opts :public-url]) "dir" (:dir s))
+(defn- cli-opts
+  "--port 8080 --dir tenant --frodo <export> --services <edn> --modules oauth,idm --realm alpha
+  --token-format jwt|opaque --public-url <url> --cookie-name <name>; bare args are port then dir."
+  [args]
+  (loop [[a b & more :as as] args o {} bare []]
+    (cond
+      (empty? as) (cond-> o (first bare) (assoc :port (first bare)) (second bare) (assoc :dir (second bare)))
+      (str/starts-with? a "--") (recur more (assoc o (keyword (subs a 2)) b) bare)
+      :else (recur (rest as) o (conj bare a)))))
+
+(defn -main [& args]
+  (let [{:keys [port modules token-format] :as o} (cli-opts args)
+        s (start! (cond-> (assoc o :port (Integer/parseInt (or port "8080")))
+                    modules (assoc :modules (set (map keyword (str/split modules #","))))
+                    token-format (assoc :token-format (keyword token-format))))]
+    (println "sling fake tenant on" (get-in s [:opts :public-url])
+             (if (:frodo o) (str "frodo export " (:frodo o)) (str "dir " (:dir s)))
+             "modules" (str/join "," (sort (map name (get-in s [:opts :modules])))))
     @(promise)))

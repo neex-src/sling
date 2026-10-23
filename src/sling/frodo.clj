@@ -32,8 +32,12 @@
         (str/starts-with? p (str "realm/root-" realm "/"))
         (str/starts-with? p "global/"))))
 
-(defn- source-of [f script]
+(defn- source-of
+  "Script text from an export: a file:// reference, lines, or (in journey files) a JSON-encoded string."
+  [f script]
   (cond
+    (and (string? script) (str/starts-with? script "\""))
+    (let [v (try (json/parse-string script) (catch Exception _ script))] (if (sequential? v) (str/join "\n" v) v))
     (and (string? script) (str/starts-with? script "file://"))
     (let [g (io/file (.getParentFile f) (subs script 7))] (when (.exists g) (slurp g)))
     (sequential? script) (str/join "\n" script)

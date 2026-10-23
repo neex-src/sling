@@ -1,6 +1,8 @@
 {:tasks
- {serve     {:doc "Start the mock tenant: bb serve [port] [tenant-dir]"
+ {serve     {:doc "Start the fake tenant: bb serve [port] [tenant-dir] | --frodo <export> --services <edn> --modules oauth,idm,am,esv,journeys --token-format jwt|opaque"
              :task (apply shell "clojure" "-M" "-m" "sling.server" *command-line-args*)}
+  coverage  {:doc "What of a Frodo export runs here, and what blocks the rest: bb coverage <export-dir> [realm]"
+             :task (apply shell "clojure" "-M" "-m" "sling.frodo" *command-line-args*)}
   deploy    {:doc "PUT tenant/ to a tenant API: bb deploy --base URL --token T [--dry-run]"
              :task (load-file "bb/deploy.bb")}
   login     {:doc "Drive /authenticate like a client: bb login --base URL --user U --password P [--otp C] [--ip IP]"
