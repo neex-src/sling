@@ -17,7 +17,8 @@
   :test {:extra-paths ["test"]
          :extra-deps {org.springframework.security/spring-security-oauth2-jose {:mvn/version "6.3.4"}
                       org.springframework.security/spring-security-oauth2-resource-server {:mvn/version "6.3.4"}
-                      org.springframework/spring-web {:mvn/version "6.1.14"}}}
+                      org.springframework/spring-web {:mvn/version "6.1.14"}
+                      com.fasterxml.jackson.core/jackson-databind {:mvn/version "2.17.2"}}}
   :nrepl {:extra-deps {nrepl/nrepl {:mvn/version "1.3.0"}
                        cider/cider-nrepl {:mvn/version "0.50.2"}
                        org.springframework.security/spring-security-oauth2-jose {:mvn/version "6.3.4"}

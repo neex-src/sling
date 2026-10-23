@@ -4,6 +4,7 @@
   hrdb:up   {:doc "Start the HR database (Postgres in podman) the HRDB connector fixture writes to"
              :task (shell "bb" "bb/hrdb.bb" "up")}
   hrdb:down {:doc "Stop it" :task (shell "bb" "bb/hrdb.bb" "down")}
+  test      {:doc "The whole suite in a fresh JVM (clojure -M:test:icf), exit code for CI" :task (load-file "bb/test.bb")}
   coverage  {:doc "What of a Frodo export runs here, and what blocks the rest: bb coverage <export-dir> [realm]"
              :task (apply shell "clojure" "-M" "-m" "sling.frodo" *command-line-args*)}
   deploy    {:doc "PUT tenant/ to a tenant API: bb deploy --base URL --token T [--dry-run]"

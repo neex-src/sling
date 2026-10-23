@@ -7,19 +7,22 @@
               GET|PUT .../realm-config/authentication/authenticationtrees/nodes/<type>/<version>/<id>
               GET|PUT .../scripts[/<uuid>]                                       source is base64
     oauth     /am/oauth2[/realms/root/realms/<r>]/...          see sling.oauth
-    idm       /openidm/managed/<type>[/<id>]                    see sling.idm
+    idm       /openidm/managed/<type>[/<id>], /openidm/endpoint/<name>, /openidm/system/<conn>/<type>,
+              /openidm/recon, /openidm/config[/<id>]           see sling.openidm
     am        /am/json/serverinfo/*, .../sessions, /am/XUI/     see sling.am
+    dev       /sling/outbox (mail, SMS, OTPs, resume links), /sling/sync (what sync did)
     esv       /environment/variables, /environment/secrets      see sling.am
 
   Each group is a module; start with only the ones a consumer needs ({:modules #{:oauth}}) and a
   call into a module that is off answers 404 and names it, so a hidden dependency shows at once.
 
   The tenant is read from a sling directory (tenant/, PUTs write the files back, so `git diff`
-  shows what a deploy changed) or from a Frodo export ({:frodo dir}, PUTs stay in memory).
+  shows what a deploy changed) or from a Frodo export ({:frodo dir}; PUTs stay in memory unless
+  {:write true}, then they go back into the export's files, see sling.frodowrite).
   Management calls need a token with fr:am:* (or fr:idm:* for /openidm), an SSO session, or the
   dev token. Send `X-Sling-Debug: true` on /authenticate to get the reason and the node trace.
 
-  Usage: clojure -M -m sling.server [port] [tenant-dir]   (bb serve)"
+  Usage: clojure -M:icf -m sling.server [port] [tenant-dir] | --frodo <export> ...   (bb serve)"
   (:require [cheshire.core :as json]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
