@@ -1,0 +1,16 @@
+{
+  "idm": {
+    "endpoint/orderSummary": {
+      "_id": "endpoint/orderSummary",
+      "source": "file://orderSummary.js",
+      "type": "text/javascript"
+    }
+  },
+  "meta": {
+    "exportDate": "2026-10-23T13:40:00.156Z",
+    "exportTool": "frodo",
+    "exportToolVersion": "v4.9.3 [v26.11.1]",
+    "origin": "http://localhost:18080/am",
+    "originAmVersion": "8.0.1"
+  }
+}

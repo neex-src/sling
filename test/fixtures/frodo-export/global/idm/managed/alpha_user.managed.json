@@ -1,0 +1,47 @@
+{
+  "name": "alpha_user",
+  "onCreate": {
+    "source": "object.mail = String(object.mail || \"\").toLowerCase();\nobject.description = \"created by \" + context.security.authenticationId;",
+    "type": "text/javascript"
+  },
+  "onValidate": {
+    "source": "if (/\\s/.test(String(object.userName))) { throw { code: 403, message: \"Policy validation failed: userName has spaces\" }; }",
+    "type": "text/javascript"
+  },
+  "postCreate": {
+    "source": "openidm.action(\"external/rest\", \"call\", { url: identityServer.getProperty(\"esv.orders.url\") + \"/customers\", method: \"POST\", contentType: \"application/json\", body: JSON.stringify({ id: newObject._id, mail: newObject.mail }) });",
+    "type": "text/javascript"
+  },
+  "schema": {
+    "properties": {
+      "accountStatus": {
+        "type": "string"
+      },
+      "givenName": {
+        "type": "string"
+      },
+      "mail": {
+        "type": "string"
+      },
+      "preferences": {
+        "properties": {
+          "marketing": {
+            "description": "Send me special offers",
+            "type": "boolean"
+          },
+          "updates": {
+            "description": "Send me news and updates",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "sn": {
+        "type": "string"
+      },
+      "userName": {
+        "type": "string"
+      }
+    }
+  }
+}

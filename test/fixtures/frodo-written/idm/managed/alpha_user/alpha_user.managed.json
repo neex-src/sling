@@ -1,0 +1,47 @@
+{
+  "name": "alpha_user",
+  "onCreate": {
+    "source": "file://onCreate.js",
+    "type": "text/javascript"
+  },
+  "onValidate": {
+    "source": "file://onValidate.js",
+    "type": "text/javascript"
+  },
+  "postCreate": {
+    "source": "file://postCreate.js",
+    "type": "text/javascript"
+  },
+  "schema": {
+    "properties": {
+      "accountStatus": {
+        "type": "string"
+      },
+      "givenName": {
+        "type": "string"
+      },
+      "mail": {
+        "type": "string"
+      },
+      "preferences": {
+        "properties": {
+          "marketing": {
+            "description": "Send me special offers",
+            "type": "boolean"
+          },
+          "updates": {
+            "description": "Send me news and updates",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "sn": {
+        "type": "string"
+      },
+      "userName": {
+        "type": "string"
+      }
+    }
+  }
+}

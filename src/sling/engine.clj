@@ -7,9 +7,11 @@
   ScriptedDecisionNode, InnerTreeEvaluatorNode, plus the Success and Failure terminals.
   Any other nodeType fails the journey and says so: nothing is silently skipped.
 
-  Results: {:status :callbacks|:success|:failure, :callbacks [wire], :session s, :reason str}.
+  Results: {:status :callbacks|:suspended|:success|:failure, :callbacks [wire], :session s, :reason str}.
+  A node may suspend the journey ({:suspend {:id :message}}); resume-suspended picks it up again.
   Wire callbacks have the shape /json/authenticate sends (type, output[], input[] named IDTokenN)."
-  (:require [sling.script :as script]))
+  (:require [sling.idm :as idm]
+            [sling.script :as script]))
 
 (def success-id "70e691a5-1e33-4ac3-a356-e7b6d60d92e0")
 (def failure-id "e301438c-0bd0-429c-ab0c-66126501069a")
@@ -28,7 +30,13 @@
       "TextOutputCallback" {:type type :output (out "message" (:message args) "messageType" (str (:messageType args)))}
       "HiddenValueCallback" {:type type :output (out "value" (:value args) "id" (:id args)) :input (in (:value args))}
       "ChoiceCallback" {:type type :output (out "prompt" (:prompt args) "choices" (:choices args) "defaultChoice" (:defaultChoice args))
-                        :input (in (:defaultChoice args))})))
+                        :input (in (:defaultChoice args))}
+      "ConfirmationCallback" {:type type :output (out "prompt" (:prompt args) "messageType" 0 "options" (:options args)
+                                                    "optionType" -1 "defaultOption" (or (:defaultOption args) 0))
+                              :input (in (or (:defaultOption args) 0))}
+      ;; the platform callbacks (ValidatedCreate*, *AttributeInputCallback ...): output as the node gives it
+      (cond-> {:type type :output (mapv (fn [[k v]] {:name (name k) :value v}) (:output args))}
+        (not (:output-only args)) (assoc :input (in (:default args)))))))
 
 (defn- wire [specs]
   (loop [specs specs n 1 acc []]
@@ -38,12 +46,16 @@
       acc)))
 
 (defn- answers
-  "Pair the client's answers with the callbacks we asked for, in order. Output-only ones carry none."
+  "Pair the client's answers with the callbacks we asked for, in order. Output-only ones carry no
+  value and are marked :output; nodes see only the others, scripts see all (a script that only
+  showed text still knows it is being resumed)."
   [pending client]
   (vec (for [[spec cb] (map vector pending client)
-             :when (not= "TextOutputCallback" (:type spec))]
-         (cond-> {:type (:type spec) :value (some-> cb :input first :value)}
-           (= "HiddenValueCallback" (:type spec)) (assoc :id (get-in spec [:args :id]))))))
+             :let [output? (or (= "TextOutputCallback" (:type spec)) (get-in spec [:args :output-only]))]]
+         (cond-> {:type (:type spec) :value (when-not output? (some-> cb :input first :value))}
+           output? (assoc :output true)
+           (= "HiddenValueCallback" (:type spec)) (assoc :id (get-in spec [:args :id]))
+           (:child spec) (assoc :child (:child spec))))))
 
 ;; ---- nodes -----------------------------------------------------------------------------------
 
@@ -68,15 +80,21 @@
 (defmethod run-node "DataStoreDecisionNode" [{:keys [tenant session]}]
   (let [user (get-in session [:shared "username"])
         pw (get-in session [:transient "password"])
-        known (get-in tenant [:services :users user])]
-    {:outcome (if (and known (= pw (:password known))) "true" "false")}))
+        {:keys [idm realm]} (:services tenant)
+        known (if idm
+                (idm/find-by idm (str realm "_user") :userName user)
+                (get-in tenant [:services :users user]))]
+    {:outcome (if (and known (some? pw) (= pw (:password known))) "true" "false")}))
 
-(defmethod run-node "ScriptedDecisionNode" [{:keys [tenant session config inputs]}]
-  (if-let [{:keys [source]} (get-in tenant [:scripts (:script config)])]
-    (let [r (script/run-script source
-                               {:shared (:shared session) :transient (:transient session)
-                                :request (:request session) :callbacks inputs}
-                               (:services tenant))
+(defmethod run-node "ScriptedDecisionNode" [{:keys [tenant session config all-inputs]}]
+  (if-let [{:keys [source meta]} (get-in tenant [:scripts (:script config)])]
+    (let [r (if (= "GROOVY" (:language meta))
+              {:error (str "script " (pr-str (:name meta)) " is Groovy, which sling does not run")}
+              (script/run-script source
+                                 {:shared (:shared session) :transient (:transient session)
+                                  :request (:request session) :callbacks (or all-inputs [])}
+                                 (:services tenant)
+                                 {:legacy (= "1.0" (:evaluatorVersion meta))}))
           allowed (set (or (:outcomes config) ["true" "false"]))
           a (:action r)]
       (cond
@@ -136,10 +154,19 @@
                            (assoc :journey (:tree cfg) :node (:entryNodeId inner)))
                        nil (inc steps))
                 (fail s (str "inner journey " (pr-str (:tree cfg)) " does not exist")))
-              (let [r (run-node {:type type :config cfg :tenant t :session s :inputs inputs})]
+              (let [r (run-node {:type type :config cfg :tenant t :session s
+                                  :inputs (vec (remove :output inputs)) :all-inputs inputs})]
                 (cond
                   (:error r) (fail (update s :trace (fnil conj []) {:journey (:journey s) :node name :error (:error r)})
                                    (str name ": " (:error r)))
+
+                  (:suspend r)
+                  (let [s' (-> s (update :shared merge (:shared r)) (update :transient merge (:transient r))
+                               (assoc :pending nil)
+                               (dissoc :resumed))]
+                    {:status :suspended :suspend (:suspend r) :session s'
+                     :callbacks (wire [{:type "SuspendedTextOutputCallback"
+                                        :args {:output {:message (get-in r [:suspend :message]) :messageType "0"} :output-only true}}])})
 
                   (:callbacks r)
                   (let [s' (-> s (update :shared merge (:shared r)) (update :transient merge (:transient r))
@@ -175,6 +202,11 @@
   "Continue a session that is waiting for callbacks. `client` is the callbacks array the client posted back."
   [t session client]
   (advance t session (answers (:pending session) client)))
+
+(defn resume-suspended
+  "Continue a session a node suspended (Email Suspend): that node runs again and sees :resumed."
+  [t session]
+  (advance t (assoc session :resumed true) nil))
 
 (defn answer
   "Test helper: fill the first input of each wire callback in order from `values`, in the client's JSON shape."

@@ -1,0 +1,10 @@
+{
+  "variable": {
+    "esv-member-domain": {
+      "_id": "esv-member-domain",
+      "description": "Mail domain of members",
+      "expressionType": "string",
+      "value": "members.test"
+    }
+  }
+}

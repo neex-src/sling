@@ -1,0 +1,10 @@
+;; What a Frodo export does not carry: client secrets, people, service accounts.
+{:default-journey "PlatformLogin"
+ :clients {"orders-service" {:secret "orders-secret"}}
+ ;; journeys and IDM scripts may call services running on this machine for real
+ :passthrough ["http://127.0.0.1:"]
+ :http [{:match "http://127.0.0.1:18095/customers" :method "POST" :response {:status 201 :body {:ok true}}}]
+ :idm {"alpha_user" [{:_id "3f9a2b1c-0000-4000-8000-000000000001" :userName "ana" :password "Ana-pw-123"
+                      :accountStatus "active" :mail "ana@members.test" :givenName "Ana" :sn "Ionescu"}
+                     {:_id "3f9a2b1c-0000-4000-8000-000000000002" :userName "dan" :password "Dan-pw-123"
+                      :accountStatus "active" :mail "dan@elsewhere.test" :givenName "Dan" :sn "Pop"}]}}

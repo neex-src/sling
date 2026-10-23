@@ -1,0 +1,38 @@
+{
+  "application": {
+    "orders-web": {
+      "_id": "orders-web",
+      "_type": {
+        "_id": "OAuth2Client",
+        "collection": true,
+        "name": "OAuth2 Clients"
+      },
+      "advancedOAuth2ClientConfig": {
+        "grantTypes": [
+          "authorization_code",
+          "refresh_token"
+        ],
+        "responseTypes": [
+          "code"
+        ],
+        "tokenEndpointAuthMethod": "none"
+      },
+      "coreOAuth2ClientConfig": {
+        "clientType": "Public",
+        "defaultScopes": [
+          "openid"
+        ],
+        "redirectionUris": [
+          "http://localhost:5173/callback"
+        ],
+        "scopes": [
+          "openid",
+          "profile",
+          "email",
+          "orders:read"
+        ],
+        "userpassword": null
+      }
+    }
+  }
+}

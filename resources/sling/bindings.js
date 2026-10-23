@@ -13,6 +13,9 @@
     a.get = function (i) { return a[i]; };
     a.size = function () { return a.length; };
     a.contains = function (x) { return a.indexOf(x) !== -1; };
+    a.isEmpty = function () { return a.length === 0; };
+    a.toArray = function () { return a.slice(); };
+    a.iterator = function () { var i = 0; return { hasNext: function () { return i < a.length; }, next: function () { return a[i++]; } }; };
     return a;
   };
   var shared = input.shared, transient = input.transient;
@@ -112,8 +115,13 @@
   };
 
   var openidm = {
-    read: function (path) { return call("openidm.read", { path: path }); },
-    query: function (path, params) { return call("openidm.query", { path: path, params: params || {} }); }
+    read: function (path, params, fields) { return call("openidm.read", { path: path, params: params, fields: fields }); },
+    query: function (path, params, fields) { return call("openidm.query", { path: path, params: params || {}, fields: fields }); },
+    create: function (path, id, content, params, fields) { return call("openidm.create", { path: path, id: id, content: content, params: params, fields: fields }); },
+    update: function (path, rev, content, params, fields) { return call("openidm.update", { path: path, rev: rev, content: content, params: params, fields: fields }); },
+    patch: function (path, rev, ops, params, fields) { return call("openidm.patch", { path: path, rev: rev, ops: ops, params: params, fields: fields }); },
+    "delete": function (path, rev) { return call("openidm.delete", { path: path, rev: rev }); },
+    action: function (path, action, content, params, fields) { return call("openidm.action", { path: path, action: action, content: content, params: params, fields: fields }); }
   };
   var systemEnv = { getProperty: function (k) { return call("env.get", { key: k }); } };
   var logger = {};
@@ -131,6 +139,8 @@
       idRepository: idRepository, httpClient: httpClient, openidm: openidm, systemEnv: systemEnv,
       logger: logger, existingSession: existingSession, resumedFromSuspend: false
     },
-    result: function () { return JSON.stringify(out); }
+    result: function () { return JSON.stringify(out); },
+    // for the legacy (1.0) layer in legacy.js, which writes to the same state
+    internals: { out: out, call: call, list: list, input: input, want: want, builder: builder, response: response }
   };
 })

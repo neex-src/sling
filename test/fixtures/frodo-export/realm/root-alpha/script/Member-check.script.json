@@ -1,0 +1,14 @@
+{
+  "script": {
+    "5d8f1c2e-3b4a-4c5d-9e6f-7a8b9c0d1e01": {
+      "_id": "5d8f1c2e-3b4a-4c5d-9e6f-7a8b9c0d1e01",
+      "context": "AUTHENTICATION_TREE_DECISION_NODE",
+      "default": false,
+      "description": "Members get the preferences journey; the member domain comes from an ESV",
+      "evaluatorVersion": "2.0",
+      "language": "JAVASCRIPT",
+      "name": "Member check",
+      "script": "file://Member-check.script.js"
+    }
+  }
+}
