@@ -235,3 +235,53 @@
     (is (m? "(age gt 40) or (age le 30 and roles eq \"b\")"))
     (is (not (m? "false or userName sw 'x'")))
     (is (thrown? clojure.lang.ExceptionInfo (idm/parse-filter "userName eq 'a' and")))))
+
+(defn- orders-service
+  "A stand-in for one of our own services, on a real socket: GET /orders, POST /customers."
+  [seen]
+  (let [s (com.sun.net.httpserver.HttpServer/create (java.net.InetSocketAddress. "127.0.0.1" 0) 0)]
+    (.createContext s "/" (reify com.sun.net.httpserver.HttpHandler
+                            (handle [_ ex]
+                              (let [body (slurp (.getRequestBody ex))
+                                    out (.getBytes (if (= "GET" (.getRequestMethod ex))
+                                                     "[{\"id\":\"o-1\",\"total\":12.5},{\"id\":\"o-2\",\"total\":3}]"
+                                                     "{\"ok\":true}"))]
+                                (swap! seen conj [(.getRequestMethod ex) (str (.getRequestURI ex)) body])
+                                (.add (.getResponseHeaders ex) "Content-Type" "application/json")
+                                (.sendResponseHeaders ex 200 (count out))
+                                (with-open [o (.getResponseBody ex)] (.write o out))))))
+    (.start s)
+    s))
+
+(deftest idm-scripts-run-against-our-services
+  (let [seen (atom [])
+        svc (orders-service seen)
+        bearer {"Authorization" (str "Bearer " (get-in (client-token "fr:idm:*") [:body :access_token]))}]
+    (swap! (:tenant *srv*) assoc-in [:services :esv "esv.orders.url"] (str "http://127.0.0.1:" (.getPort (.getAddress svc))))
+    (try
+      (testing "onCreate shapes the object, postCreate tells our service, whoever creates"
+        (let [r (call "POST" "/openidm/managed/alpha_user" :query {"_action" "create"} :headers bearer
+                      :body {:userName "eva" :password "Eva-pw-123" :mail "Eva@Members.TEST"})]
+          (is (= 201 (:status r)))
+          (is (= ["eva@members.test" "created by orders-service"] [(get-in r [:body :mail]) (get-in r [:body :description])]))
+          (is (= "POST" (ffirst @seen)))
+          (is (= (get-in r [:body :_id]) (:id (json/parse-string (nth (first @seen) 2) true))))))
+      (testing "onValidate refuses with the platform's 403"
+        (let [r (call "POST" "/openidm/managed/alpha_user" :query {"_action" "create"} :headers bearer :body {:userName "has space"})]
+          (is (= 403 (:status r)))
+          (is (re-find #"userName has spaces" (get-in r [:body :message])))))
+      (testing "a custom endpoint: IDM query + external/rest to our service + ESV + context"
+        (let [r (call "GET" "/openidm/endpoint/orderSummary" :query {"user" "ana"} :headers bearer)]
+          (is (= 200 (:status r)))
+          (is (= {:count 2 :user "ana"} {:count (get-in r [:body :count]) :user (get-in r [:body :user :userName])}))
+          (is (= ["GET" "/orders?user=ana"] (subvec (last @seen) 0 2)))))
+      (testing "errors thrown by the endpoint keep their code"
+        (is (= 404 (:status (call "GET" "/openidm/endpoint/orderSummary" :query {"user" "nobody"} :headers bearer))))
+        (is (= 405 (:status (call "DELETE" "/openidm/endpoint/orderSummary" :headers bearer)))))
+      (testing "a Groovy managed object script is refused by name"
+        (swap! (:tenant *srv*) assoc-in [:managed-schemas "alpha_user" :onUpdate] {:type "groovy" :source "object"})
+        (let [id (:_id (idm/find-by (:idm *srv*) "alpha_user" :userName "ana"))
+              r (call "PATCH" (str "/openidm/managed/alpha_user/" id) :headers bearer :body [{:operation "replace" :field "/sn" :value "X"}])]
+          (is (= 501 (:status r)))
+          (is (re-find #"groovy, which sling does not run" (get-in r [:body :message])))))
+      (finally (.stop svc 0)))))

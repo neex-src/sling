@@ -82,7 +82,7 @@
                                  [(:name o) o]))
      :idm-endpoints (into {} (for [f (files-ending root ".idm.json") :when (keep? f)
                                    [id cfg] (:idm (read-json f))
-                                   :let [id (clojure.core/name id)]
+                                   :let [id (subs (str id) 1)]
                                    :when (str/starts-with? id "endpoint/")]
                                [(subs id 9) (cond-> cfg (and (nil? (:source cfg)) (:file cfg))
                                               (assoc :source (source-of f (str "file://" (:file cfg)))))]))

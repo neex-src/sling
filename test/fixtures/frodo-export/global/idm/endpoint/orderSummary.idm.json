@@ -1,0 +1,9 @@
+{
+  "idm" : {
+    "endpoint/orderSummary" : {
+      "_id" : "endpoint/orderSummary",
+      "type" : "text/javascript",
+      "source" : "(function () {\n  // Orders of the calling user, from the orders service, with the user's profile added.\n  if (request.method !== \"read\") { throw { code: 405, message: \"orderSummary only reads\" }; }\n  var who = request.additionalParameters.user || context.security.authenticationId;\n  var users = openidm.query(\"managed/alpha_user\", { _queryFilter: \"userName eq \\\"\" + who + \"\\\"\" }, [\"userName\", \"mail\"]).result;\n  if (users.length === 0) { throw { code: 404, message: \"no user \" + who }; }\n  var orders = openidm.action(\"external/rest\", \"call\", {\n    url: identityServer.getProperty(\"esv.orders.url\") + \"/orders?user=\" + who, method: \"GET\" });\n  logger.info(\"orderSummary for {}: {} orders\", who, orders.length);\n  return { user: users[0], orders: orders, count: orders.length };\n}());"
+    }
+  }
+}

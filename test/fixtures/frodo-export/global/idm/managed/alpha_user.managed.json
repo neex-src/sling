@@ -1,19 +1,47 @@
 {
-  "name": "alpha_user",
-  "schema": {
-    "properties": {
-      "userName": {"type": "string"},
-      "mail": {"type": "string"},
-      "givenName": {"type": "string"},
-      "sn": {"type": "string"},
-      "accountStatus": {"type": "string"},
-      "preferences": {
-        "type": "object",
-        "properties": {
-          "updates": {"type": "boolean", "description": "Send me news and updates"},
-          "marketing": {"type": "boolean", "description": "Send me special offers"}
+  "name" : "alpha_user",
+  "schema" : {
+    "properties" : {
+      "userName" : {
+        "type" : "string"
+      },
+      "mail" : {
+        "type" : "string"
+      },
+      "givenName" : {
+        "type" : "string"
+      },
+      "sn" : {
+        "type" : "string"
+      },
+      "accountStatus" : {
+        "type" : "string"
+      },
+      "preferences" : {
+        "type" : "object",
+        "properties" : {
+          "updates" : {
+            "type" : "boolean",
+            "description" : "Send me news and updates"
+          },
+          "marketing" : {
+            "type" : "boolean",
+            "description" : "Send me special offers"
+          }
         }
       }
     }
+  },
+  "onCreate" : {
+    "type" : "text/javascript",
+    "source" : "object.mail = String(object.mail || \"\").toLowerCase();\nobject.description = \"created by \" + context.security.authenticationId;"
+  },
+  "onValidate" : {
+    "type" : "text/javascript",
+    "source" : "if (/\\s/.test(String(object.userName))) { throw { code: 403, message: \"Policy validation failed: userName has spaces\" }; }"
+  },
+  "postCreate" : {
+    "type" : "text/javascript",
+    "source" : "openidm.action(\"external/rest\", \"call\", { url: identityServer.getProperty(\"esv.orders.url\") + \"/customers\", method: \"POST\", contentType: \"application/json\", body: JSON.stringify({ id: newObject._id, mail: newObject.mail }) });"
   }
 }

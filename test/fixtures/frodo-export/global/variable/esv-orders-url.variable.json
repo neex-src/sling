@@ -1,0 +1,10 @@
+{
+  "variable" : {
+    "esv-orders-url" : {
+      "_id" : "esv-orders-url",
+      "description" : "Base URL of the orders service",
+      "expressionType" : "string",
+      "value" : "http://127.0.0.1:18095"
+    }
+  }
+}
