@@ -123,6 +123,35 @@
                             [id cfg]))
      :services {:esv (into {} variables) :default-journey "Login"}}))
 
+(defn provenance
+  "Which file each thing came from, for writing it back: {:tree {name f} :script {id f}
+  :endpoint {name f} :managed {name f} :managed-list f :mapping {name f} :mapping-list f
+  :config {id f} :variable {id f}}. Scripts embedded in journey files are not listed: the
+  journey's own write refreshes them."
+  [root realm]
+  (let [keep? #(in-realm? root realm %)
+        each (fn [suffix] (filter keep? (files-ending root suffix)))]
+    {:tree (into {} (for [f (each ".journey.json"), [n _] (:trees (read-json f))] [(name n) f]))
+     :embedded (reduce (fn [m [sid n]] (update m sid (fnil conj #{}) n)) {}
+                       (for [f (each ".journey.json"), [n j] (:trees (read-json f)), [_ s] (:scripts j) :when (:script s)]
+                         [(:_id s) (name n)]))
+     :script (into {} (for [f (each ".script.json"), [_ m] (:script (read-json f))] [(:_id m) f]))
+     :endpoint (into {} (for [f (each ".idm.json"), [id _] (:idm (read-json f))
+                              :let [id (subs (str id) 1)] :when (str/starts-with? id "endpoint/")]
+                          [(subs id 9) f]))
+     :managed (into {} (for [f (each ".managed.json") :let [m (read-json f)] :when (:name m)] [(:name m) f]))
+     :managed-list (first (for [f (each ".idm.json") :when (get-in (read-json f) [:idm :managed])] f))
+     :mapping (into {} (for [f (concat (each ".sync.json") (each ".mapping.json"))
+                             :let [m (read-json f) m (if (:idm m) (first (vals (:idm m))) m)]
+                             :when (:name m)]
+                         [(:name m) f]))
+     :mapping-list (first (for [f (each ".idm.json") :when (get-in (read-json f) [:idm :sync])] f))
+     :config (into {} (for [f (each ".idm.json"), [id _] (:idm (read-json f))
+                            :let [id (subs (str id) 1)]
+                            :when (not (or (str/starts-with? id "endpoint/") (#{"sync" "managed"} id)))]
+                        [id f]))
+     :variable (into {} (for [f (each ".variable.json"), [id _] (:variable (read-json f))] [(name id) f]))}))
+
 ;; ---- coverage ------------------------------------------------------------------------------
 
 (def ^:private implemented

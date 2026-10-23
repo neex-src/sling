@@ -27,6 +27,7 @@
             [sling.am :as am]
             [sling.engine :as engine]
             [sling.frodo :as frodo]
+            [sling.frodowrite :as fw]
             [sling.idm :as idm]
             [sling.jwt :as jwt]
             [sling.mfa]
@@ -113,6 +114,25 @@
                            [:headers "Set-Cookie"] [cookie]))
       (web/json 401 (merge {:code 401 :reason "Unauthorized" :message "Login failure"} dbg)))))
 
+(defn- update-files!
+  "Writes happen inside: one at a time, never twice."
+  [files f]
+  (locking files (reset! files (f @files))))
+
+(defn- persist!
+  "With --write on a Frodo export, put what just changed back into the export's files."
+  [{:keys [tenant files opts realm]} kind id]
+  (when files
+    (let [root (:frodo opts) t @tenant]
+      (case kind
+        :tree (update-files! files #(fw/write-journey! root realm t % id))
+        :node (doseq [j (fw/journeys-with-node t id)] (update-files! files #(fw/write-journey! root realm t % j)))
+        :script (if-let [js (and (not (get-in @files [:script id])) (seq (get-in @files [:embedded id])))]
+                  (doseq [j js] (update-files! files #(fw/write-journey! root realm t % j)))
+                  (update-files! files #(fw/write-script! root realm t % id)))
+        :config (update-files! files #(fw/write-config! root t % id))
+        :variable (update-files! files #(fw/write-variable! root t % id))))))
+
 (defn- reload! [{:keys [tenant dir realm]}]
   (swap! tenant (fn [old] (merge (store/load-tenant dir realm) (select-keys old [:services :clients])))))
 
@@ -130,7 +150,8 @@
                          (web/error 404 (str "Tree " name " not found")))
                        (web/json 200 {:result (vec (vals (:trees t))) :resultCount (count (:trees t))}))
       [:trees "PUT"] (let [name (first args) b (assoc (web/json-body req) :_id name)]
-                       (if files? (do (store/put-tree! dir realm name b) (reload! srv)) (swap! tenant assoc-in [:trees name] b))
+                       (if files? (do (store/put-tree! dir realm name b) (reload! srv))
+                           (do (swap! tenant assoc-in [:trees name] b) (persist! srv :tree name)))
                        (web/json 200 (assoc (get-in @tenant [:trees name]) :_rev "0")))
       [:nodes "GET"] (if-let [n (get-in t [:nodes (nth args 2)])]
                        (web/json 200 n)
@@ -139,7 +160,8 @@
                            cfg (web/json-body req)]
                        (if files?
                          (do (store/put-node! dir realm type version id cfg) (reload! srv))
-                         (swap! tenant assoc-in [:nodes id] (assoc cfg :_type {:_id type :version version} :_id id)))
+                         (do (swap! tenant assoc-in [:nodes id] (assoc cfg :_type (merge {:_id type} (:_type cfg)) :_id id))
+                             (persist! srv :node id)))
                        (web/json 200 (get-in @tenant [:nodes id])))
       [:scripts "GET"] (if-let [id (first args)]
                          (if-let [s (get-in t [:scripts id])]
@@ -149,7 +171,8 @@
       [:scripts "PUT"] (let [id (first args) b (web/json-body req)]
                          (if files?
                            (do (store/put-script! dir realm id b) (reload! srv))
-                           (swap! tenant assoc-in [:scripts id] (decode-script (assoc b :_id id))))
+                           (do (swap! tenant assoc-in [:scripts id] (decode-script (assoc b :_id id)))
+                               (persist! srv :script id)))
                          (web/json 200 (store/script-rest (get-in @tenant [:scripts id]))))
       (web/error 405 (str m " " (name kind))))))
 
@@ -216,7 +239,11 @@
                      (try (web/json 200 (openidm/recon (:openidm srv) (idm-context srv req realm) (web/param req "mapping")))
                           (catch clojure.lang.ExceptionInfo e (web/error (or (:code (ex-data e)) 400) (ex-message e))))
                      (deny srv req))
-            :config (if (allowed? srv req "fr:idm:*") (openidm/handle-config (:openidm srv) req (second m)) (deny srv req))
+            :config (if (allowed? srv req "fr:idm:*")
+                      (let [r (openidm/handle-config (:openidm srv) req (second m))]
+                        (when (and (= "PUT" (:method req)) (= 200 (:status r))) (persist! srv :config (second m)))
+                        r)
+                      (deny srv req))
             ;; Frodo asks after the connector servers; this tenant has none connected
             :system-actions (if (allowed? srv req "fr:idm:*") (web/json 200 {:openicf []}) (deny srv req))
             :sync-log (web/json 200 {:result @(:sync-log (:openidm srv)) :links @(:links (:openidm srv))})
@@ -224,7 +251,10 @@
                       (do (reset! (get-in @(:tenant srv) [:services :outbox]) []) (web/json 200 {:result []}))
                       (web/json 200 {:result @(get-in @(:tenant srv) [:services :outbox])}))
             :env (if (allowed? srv req "fr:idc:esv:*")
-                   (am/environment (:tenant srv) req (nth m 1) (nth m 2))
+                   (let [r (am/environment (:tenant srv) req (nth m 1) (nth m 2))]
+                     (when (and (= "variables" (nth m 1)) (#{"PUT" "DELETE"} (:method req)) (= 200 (:status r)))
+                       (persist! srv :variable (nth m 2)))
+                     r)
                    (deny srv req))))))))
 
 ;; ---- CORS ----------------------------------------------------------------------------------
@@ -291,6 +321,7 @@
     :modules all-modules  :public-url \"http://127.0.0.1:<port>\"  :token-format :jwt | :opaque
     :cookie-name \"iPlanetDirectoryPro\"  :dev-token \"local-dev\"  :access-ttl 3600
     :cors-origins nil (SPA origins allowed to call with credentials; default any localhost page)
+    :write false (with :frodo: PUTs go back into the export's files, see sling.frodowrite)
   Returns the server map (atoms :tenant :sessions :sso :tokens :codes :idm); stop with (stop! it)."
   [{:keys [port bind dir realm frodo services] :or {port 8080 bind "127.0.0.1" dir "tenant" realm "alpha"} :as o}]
   (let [http (HttpServer/create (InetSocketAddress. ^String bind (int port)) 0)
@@ -308,6 +339,7 @@
         _ (swap! tenant update :services assoc :idm idm :realm realm :outbox (atom []) :public-url (:public-url opts)
                  :openidm (fn [op args] (openidm/dispatch env internal 0 op args)))
         srv {:tenant tenant :openidm env
+             :files (when (and frodo (:write o)) (atom (frodo/provenance frodo realm)))
              :sessions (atom {}) :sso (atom {}) :tokens (atom {}) :codes (atom {}) :idm idm
              :key (jwt/new-key) :dir (when-not frodo dir) :realm realm :opts opts}]
     (.createContext http "/" (reify HttpHandler
@@ -322,7 +354,7 @@
 
 (defn- cli-opts
   "--port 8080 --bind 127.0.0.1 --dir tenant --frodo <export> --services <edn> --modules oauth,idm --realm alpha
-  --token-format jwt|opaque --public-url <url> --cookie-name <name> --cors-origins <o1,o2>; bare args are port then dir."
+  --token-format jwt|opaque --public-url <url> --cookie-name <name> --cors-origins <o1,o2> --write true; bare args are port then dir."
   [args]
   (loop [[a b & more :as as] args o {} bare []]
     (cond
@@ -331,9 +363,10 @@
       :else (recur (rest as) o (conj bare a)))))
 
 (defn -main [& args]
-  (let [{:keys [port modules token-format cors-origins] :as o} (cli-opts args)
+  (let [{:keys [port modules token-format cors-origins write] :as o} (cli-opts args)
         s (start! (cond-> (assoc o :port (Integer/parseInt (or port "8080")))
                     cors-origins (assoc :cors-origins (str/split cors-origins #","))
+                    write (assoc :write (= "true" write))
                     modules (assoc :modules (set (map keyword (str/split modules #","))))
                     token-format (assoc :token-format (keyword token-format))))]
     (println "sling fake tenant on" (get-in s [:opts :public-url])
