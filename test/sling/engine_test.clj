@@ -53,7 +53,7 @@
   (testing "unknown journey"
     (is (= "Tree does not exist" (:reason (engine/start tenant "Nope" {})))))
   (testing "a node type that is not implemented fails loudly"
-    (let [t (assoc-in tenant [:trees "Login" :nodes (keyword (get-in tenant [:trees "Login" :entryNodeId])) :nodeType] "PageNode")
+    (let [t (assoc-in tenant [:trees "Login" :nodes (keyword (get-in tenant [:trees "Login" :entryNodeId])) :nodeType] "SocialProviderHandlerNode")
           r (engine/start t "Login" {})]
       (is (= :failure (:status r)))
-      (is (re-find #"PageNode is not implemented" (:reason r))))))
+      (is (re-find #"SocialProviderHandlerNode is not implemented" (:reason r))))))

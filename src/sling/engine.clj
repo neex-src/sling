@@ -9,7 +9,8 @@
 
   Results: {:status :callbacks|:success|:failure, :callbacks [wire], :session s, :reason str}.
   Wire callbacks have the shape /json/authenticate sends (type, output[], input[] named IDTokenN)."
-  (:require [sling.script :as script]))
+  (:require [sling.idm :as idm]
+            [sling.script :as script]))
 
 (def success-id "70e691a5-1e33-4ac3-a356-e7b6d60d92e0")
 (def failure-id "e301438c-0bd0-429c-ab0c-66126501069a")
@@ -28,7 +29,13 @@
       "TextOutputCallback" {:type type :output (out "message" (:message args) "messageType" (str (:messageType args)))}
       "HiddenValueCallback" {:type type :output (out "value" (:value args) "id" (:id args)) :input (in (:value args))}
       "ChoiceCallback" {:type type :output (out "prompt" (:prompt args) "choices" (:choices args) "defaultChoice" (:defaultChoice args))
-                        :input (in (:defaultChoice args))})))
+                        :input (in (:defaultChoice args))}
+      "ConfirmationCallback" {:type type :output (out "prompt" (:prompt args) "messageType" 0 "options" (:options args)
+                                                    "optionType" -1 "defaultOption" (or (:defaultOption args) 0))
+                              :input (in (or (:defaultOption args) 0))}
+      ;; the platform callbacks (ValidatedCreate*, *AttributeInputCallback ...): output as the node gives it
+      (cond-> {:type type :output (mapv (fn [[k v]] {:name (name k) :value v}) (:output args))}
+        (not (:output-only args)) (assoc :input (in (:default args)))))))
 
 (defn- wire [specs]
   (loop [specs specs n 1 acc []]
@@ -41,9 +48,10 @@
   "Pair the client's answers with the callbacks we asked for, in order. Output-only ones carry none."
   [pending client]
   (vec (for [[spec cb] (map vector pending client)
-             :when (not= "TextOutputCallback" (:type spec))]
+             :when (not (or (= "TextOutputCallback" (:type spec)) (get-in spec [:args :output-only])))]
          (cond-> {:type (:type spec) :value (some-> cb :input first :value)}
-           (= "HiddenValueCallback" (:type spec)) (assoc :id (get-in spec [:args :id]))))))
+           (= "HiddenValueCallback" (:type spec)) (assoc :id (get-in spec [:args :id]))
+           (:child spec) (assoc :child (:child spec))))))
 
 ;; ---- nodes -----------------------------------------------------------------------------------
 
@@ -68,8 +76,11 @@
 (defmethod run-node "DataStoreDecisionNode" [{:keys [tenant session]}]
   (let [user (get-in session [:shared "username"])
         pw (get-in session [:transient "password"])
-        known (get-in tenant [:services :users user])]
-    {:outcome (if (and known (= pw (:password known))) "true" "false")}))
+        {:keys [idm realm]} (:services tenant)
+        known (if idm
+                (idm/find-by idm (str realm "_user") :userName user)
+                (get-in tenant [:services :users user]))]
+    {:outcome (if (and known (some? pw) (= pw (:password known))) "true" "false")}))
 
 (defmethod run-node "ScriptedDecisionNode" [{:keys [tenant session config inputs]}]
   (if-let [{:keys [source]} (get-in tenant [:scripts (:script config)])]

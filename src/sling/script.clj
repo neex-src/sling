@@ -14,7 +14,8 @@
   An unmatched httpClient call answers 599 and says so: a missing fake must be loud."
   (:require [cheshire.core :as json]
             [clojure.java.io :as io]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [sling.idm :as idm])
   (:import (org.graalvm.polyglot Context Engine Source Value)
            (org.graalvm.polyglot.proxy ProxyExecutable)))
 
@@ -50,14 +51,35 @@
         found (if f (filter #(= v (str (get % f))) users) users)]
     {:result (vec found) :resultCount (count found)}))
 
+(defn- idm-op
+  "The same calls answered from the IDM store the server shares with REST, when there is one."
+  [{:keys [idm realm]} op args]
+  (let [users (str realm "_user")
+        attr (fn [u a] (let [x (get u (keyword a))] (cond (nil? x) [] (sequential? x) (vec x) :else [x])))]
+    (case op
+      "idRepo.getAttribute" (some-> (idm/find-by idm users :userName (:user args)) (attr (:attr args)))
+      "idRepo.exists" (some? (idm/find-by idm users :userName (:user args)))
+      "openidm.read" (let [[_ type id] (re-matches #"managed/([^/]+)/(.+)" (:path args))
+                           type (if (= type "user") users type)]
+                       (some-> (idm/find-by idm type :userName id) (idm/public-view nil)))
+      "openidm.query" (let [[_ type] (re-matches #"managed/([^/]+)" (:path args))]
+                        (idm/query idm (if (= type "user") users type) (update-keys (:params args) name)))
+      ::none)))
+
+(declare legacy-op)
+
 (defn host-op
   "The fake world one script call sees. Returns a Clojure value, or nil for 'not there'."
   [services op args]
+  (let [r (if (:idm services) (idm-op services op args) ::none)]
+    (if (not= r ::none) r (legacy-op services op args))))
+
+(defn- legacy-op [services op args]
   (case op
     "idRepo.getAttribute" (when-let [u (get-in services [:users (:user args)])]
                             (vec (get-in u [:attrs (:attr args)])))
     "idRepo.exists" (contains? (:users services) (:user args))
-    "env.get" (get-in services [:esv (:key args)])
+    "env.get" (or (get-in services [:esv (:key args)]) (get-in services [:secrets (:key args)]))
     "http.send" (http-send services args)
     "openidm.read" (let [[_ n] (re-matches #"managed/user/(.+)" (:path args))]
                      (when-let [m (get-in services [:managed n])] (assoc m :_id n)))
