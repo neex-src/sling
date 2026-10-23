@@ -2,16 +2,28 @@
   "application": {
     "orders-service": {
       "_id": "orders-service",
-      "_type": {"_id": "OAuth2Client", "collection": true, "name": "OAuth2 Clients"},
+      "_type": {
+        "_id": "OAuth2Client",
+        "collection": true,
+        "name": "OAuth2 Clients"
+      },
       "advancedOAuth2ClientConfig": {
-        "grantTypes": ["client_credentials", "password"],
+        "grantTypes": [
+          "client_credentials",
+          "password"
+        ],
         "tokenEndpointAuthMethod": "client_secret_basic"
       },
       "coreOAuth2ClientConfig": {
         "clientType": "Confidential",
         "defaultScopes": [],
         "redirectionUris": [],
-        "scopes": ["fr:idm:*", "orders:write", "openid", "profile"],
+        "scopes": [
+          "fr:idm:*",
+          "orders:write",
+          "openid",
+          "profile"
+        ],
         "userpassword": null
       }
     }

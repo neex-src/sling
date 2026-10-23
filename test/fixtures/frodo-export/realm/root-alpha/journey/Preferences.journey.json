@@ -6,8 +6,15 @@
       "innerNodes": {
         "3d7e0c74-8b7f-4c5a-9c73-2f3e4a5b6c01": {
           "_id": "3d7e0c74-8b7f-4c5a-9c73-2f3e4a5b6c01",
-          "_type": {"_id": "AttributeCollectorNode", "collection": true, "name": "Attribute Collector"},
-          "attributesToCollect": ["preferences/updates", "preferences/marketing"],
+          "_type": {
+            "_id": "AttributeCollectorNode",
+            "collection": true,
+            "name": "Attribute Collector"
+          },
+          "attributesToCollect": [
+            "preferences/updates",
+            "preferences/marketing"
+          ],
           "identityAttribute": "userName",
           "required": false,
           "validateInputs": false
@@ -16,27 +23,51 @@
       "nodes": {
         "4e8f1d85-9c80-4d6b-8d84-3a4b5c6d7e01": {
           "_id": "4e8f1d85-9c80-4d6b-8d84-3a4b5c6d7e01",
-          "_type": {"_id": "LoginCountDecisionNode", "collection": true, "name": "Login Count Decision"},
+          "_type": {
+            "_id": "LoginCountDecisionNode",
+            "collection": true,
+            "name": "Login Count Decision"
+          },
           "amount": 3,
           "identityAttribute": "userName",
           "interval": "AT"
         },
         "4e8f1d85-9c80-4d6b-8d84-3a4b5c6d7e02": {
           "_id": "4e8f1d85-9c80-4d6b-8d84-3a4b5c6d7e02",
-          "_type": {"_id": "QueryFilterDecisionNode", "collection": true, "name": "Query Filter Decision"},
+          "_type": {
+            "_id": "QueryFilterDecisionNode",
+            "collection": true,
+            "name": "Query Filter Decision"
+          },
           "identityAttribute": "userName",
           "queryFilter": "!(/preferences pr) or /preferences/marketing eq false or /preferences/updates eq false"
         },
         "4e8f1d85-9c80-4d6b-8d84-3a4b5c6d7e03": {
           "_id": "4e8f1d85-9c80-4d6b-8d84-3a4b5c6d7e03",
-          "_type": {"_id": "PageNode", "collection": true, "name": "Page Node"},
-          "nodes": [{"_id": "3d7e0c74-8b7f-4c5a-9c73-2f3e4a5b6c01", "displayName": "Attribute Collector", "nodeType": "AttributeCollectorNode"}],
+          "_type": {
+            "_id": "PageNode",
+            "collection": true,
+            "name": "Page Node"
+          },
+          "nodes": [
+            {
+              "_id": "3d7e0c74-8b7f-4c5a-9c73-2f3e4a5b6c01",
+              "displayName": "Attribute Collector",
+              "nodeType": "AttributeCollectorNode"
+            }
+          ],
           "pageDescription": {},
-          "pageHeader": {"en": "Your preferences"}
+          "pageHeader": {
+            "en": "Your preferences"
+          }
         },
         "4e8f1d85-9c80-4d6b-8d84-3a4b5c6d7e04": {
           "_id": "4e8f1d85-9c80-4d6b-8d84-3a4b5c6d7e04",
-          "_type": {"_id": "PatchObjectNode", "collection": true, "name": "Patch Object"},
+          "_type": {
+            "_id": "PatchObjectNode",
+            "collection": true,
+            "name": "Patch Object"
+          },
           "identityAttribute": "userName",
           "identityResource": "managed/alpha_user",
           "ignoredFields": [],
@@ -54,15 +85,59 @@
         "identityResource": "managed/alpha_user",
         "innerTreeOnly": true,
         "nodes": {
-          "4e8f1d85-9c80-4d6b-8d84-3a4b5c6d7e01": {"connections": {"false": "70e691a5-1e33-4ac3-a356-e7b6d60d92e0", "true": "4e8f1d85-9c80-4d6b-8d84-3a4b5c6d7e02"}, "displayName": "Login Count Decision", "nodeType": "LoginCountDecisionNode", "x": 100, "y": 50},
-          "4e8f1d85-9c80-4d6b-8d84-3a4b5c6d7e02": {"connections": {"false": "70e691a5-1e33-4ac3-a356-e7b6d60d92e0", "true": "4e8f1d85-9c80-4d6b-8d84-3a4b5c6d7e03"}, "displayName": "Query Filter Decision", "nodeType": "QueryFilterDecisionNode", "x": 300, "y": 50},
-          "4e8f1d85-9c80-4d6b-8d84-3a4b5c6d7e03": {"connections": {"outcome": "4e8f1d85-9c80-4d6b-8d84-3a4b5c6d7e04"}, "displayName": "Page Node", "nodeType": "PageNode", "x": 500, "y": 50},
-          "4e8f1d85-9c80-4d6b-8d84-3a4b5c6d7e04": {"connections": {"FAILURE": "e301438c-0bd0-429c-ab0c-66126501069a", "PATCHED": "70e691a5-1e33-4ac3-a356-e7b6d60d92e0"}, "displayName": "Patch Object", "nodeType": "PatchObjectNode", "x": 700, "y": 50}
+          "4e8f1d85-9c80-4d6b-8d84-3a4b5c6d7e01": {
+            "connections": {
+              "false": "70e691a5-1e33-4ac3-a356-e7b6d60d92e0",
+              "true": "4e8f1d85-9c80-4d6b-8d84-3a4b5c6d7e02"
+            },
+            "displayName": "Login Count Decision",
+            "nodeType": "LoginCountDecisionNode",
+            "x": 100,
+            "y": 50
+          },
+          "4e8f1d85-9c80-4d6b-8d84-3a4b5c6d7e02": {
+            "connections": {
+              "false": "70e691a5-1e33-4ac3-a356-e7b6d60d92e0",
+              "true": "4e8f1d85-9c80-4d6b-8d84-3a4b5c6d7e03"
+            },
+            "displayName": "Query Filter Decision",
+            "nodeType": "QueryFilterDecisionNode",
+            "x": 300,
+            "y": 50
+          },
+          "4e8f1d85-9c80-4d6b-8d84-3a4b5c6d7e03": {
+            "connections": {
+              "outcome": "4e8f1d85-9c80-4d6b-8d84-3a4b5c6d7e04"
+            },
+            "displayName": "Page Node",
+            "nodeType": "PageNode",
+            "x": 500,
+            "y": 50
+          },
+          "4e8f1d85-9c80-4d6b-8d84-3a4b5c6d7e04": {
+            "connections": {
+              "FAILURE": "e301438c-0bd0-429c-ab0c-66126501069a",
+              "PATCHED": "70e691a5-1e33-4ac3-a356-e7b6d60d92e0"
+            },
+            "displayName": "Patch Object",
+            "nodeType": "PatchObjectNode",
+            "x": 700,
+            "y": 50
+          }
         },
         "staticNodes": {
-          "70e691a5-1e33-4ac3-a356-e7b6d60d92e0": {"x": 900, "y": 20},
-          "e301438c-0bd0-429c-ab0c-66126501069a": {"x": 900, "y": 120},
-          "startNode": {"x": 10, "y": 50}
+          "70e691a5-1e33-4ac3-a356-e7b6d60d92e0": {
+            "x": 900,
+            "y": 20
+          },
+          "e301438c-0bd0-429c-ab0c-66126501069a": {
+            "x": 900,
+            "y": 120
+          },
+          "startNode": {
+            "x": 10,
+            "y": 50
+          }
         },
         "uiConfig": {}
       }

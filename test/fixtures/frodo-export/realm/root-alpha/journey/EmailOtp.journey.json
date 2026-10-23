@@ -1,170 +1,173 @@
 {
-  "trees" : {
-    "EmailOtp" : {
-      "saml2Entities" : { },
-      "socialIdentityProviders" : { },
-      "tree" : {
-        "_id" : "EmailOtp",
-        "enabled" : true,
-        "entryNodeId" : "a1000000-0000-4000-8000-000000000009",
-        "identityResource" : "managed/alpha_user",
-        "innerTreeOnly" : false,
-        "nodes" : {
-          "a1000000-0000-4000-8000-000000000009" : {
-            "nodeType" : "PageNode",
-            "displayName" : "Page Node",
-            "connections" : {
-              "outcome" : "c3000000-0000-4000-8000-000000000010"
-            },
-            "x" : 0,
-            "y" : 0
+  "trees": {
+    "EmailOtp": {
+      "circlesOfTrust": {},
+      "emailTemplates": {},
+      "innerNodes": {
+        "a1000000-0000-4000-8000-000000000007": {
+          "_id": "a1000000-0000-4000-8000-000000000007",
+          "_type": {
+            "_id": "ValidatedUsernameNode",
+            "collection": true,
+            "name": "Platform Username"
           },
-          "c3000000-0000-4000-8000-000000000010" : {
-            "nodeType" : "IdentityStoreDecisionNode",
-            "displayName" : "Identity Store Decision",
-            "connections" : {
-              "TRUE" : "c3000000-0000-4000-8000-000000000011",
-              "FALSE" : "e301438c-0bd0-429c-ab0c-66126501069a",
-              "LOCKED" : "e301438c-0bd0-429c-ab0c-66126501069a",
-              "CANCELLED" : "e301438c-0bd0-429c-ab0c-66126501069a",
-              "EXPIRED" : "e301438c-0bd0-429c-ab0c-66126501069a"
-            },
-            "x" : 0,
-            "y" : 0
-          },
-          "c3000000-0000-4000-8000-000000000011" : {
-            "nodeType" : "OneTimePasswordGeneratorNode",
-            "displayName" : "HOTP Generator",
-            "connections" : {
-              "outcome" : "c3000000-0000-4000-8000-000000000012"
-            },
-            "x" : 0,
-            "y" : 0
-          },
-          "c3000000-0000-4000-8000-000000000012" : {
-            "nodeType" : "OneTimePasswordSmtpSenderNode",
-            "displayName" : "OTP Email Sender",
-            "connections" : {
-              "outcome" : "c3000000-0000-4000-8000-000000000013"
-            },
-            "x" : 0,
-            "y" : 0
-          },
-          "c3000000-0000-4000-8000-000000000013" : {
-            "nodeType" : "OneTimePasswordCollectorDecisionNode",
-            "displayName" : "OTP Collector Decision",
-            "connections" : {
-              "true" : "70e691a5-1e33-4ac3-a356-e7b6d60d92e0",
-              "false" : "e301438c-0bd0-429c-ab0c-66126501069a"
-            },
-            "x" : 0,
-            "y" : 0
-          }
+          "usernameAttribute": "userName",
+          "validateInput": false
         },
-        "staticNodes" : {
-          "70e691a5-1e33-4ac3-a356-e7b6d60d92e0" : {
-            "x" : 900,
-            "y" : 20
+        "a1000000-0000-4000-8000-000000000008": {
+          "_id": "a1000000-0000-4000-8000-000000000008",
+          "_type": {
+            "_id": "ValidatedPasswordNode",
+            "collection": true,
+            "name": "Platform Password"
           },
-          "e301438c-0bd0-429c-ab0c-66126501069a" : {
-            "x" : 900,
-            "y" : 120
-          },
-          "startNode" : {
-            "x" : 0,
-            "y" : 0
-          }
+          "passwordAttribute": "password",
+          "validateInput": false
         }
       },
-      "scripts" : { },
-      "themes" : [ ],
-      "circlesOfTrust" : { },
-      "innerNodes" : {
-        "a1000000-0000-4000-8000-000000000007" : {
-          "_id" : "a1000000-0000-4000-8000-000000000007",
-          "_type" : {
-            "_id" : "ValidatedUsernameNode",
-            "collection" : true,
-            "name" : "Platform Username"
+      "nodes": {
+        "a1000000-0000-4000-8000-000000000009": {
+          "_id": "a1000000-0000-4000-8000-000000000009",
+          "_type": {
+            "_id": "PageNode",
+            "collection": true,
+            "name": "Page Node"
           },
-          "usernameAttribute" : "userName",
-          "validateInput" : false
+          "nodes": [
+            {
+              "_id": "a1000000-0000-4000-8000-000000000007",
+              "displayName": "Platform Username",
+              "nodeType": "ValidatedUsernameNode"
+            },
+            {
+              "_id": "a1000000-0000-4000-8000-000000000008",
+              "displayName": "Platform Password",
+              "nodeType": "ValidatedPasswordNode"
+            }
+          ]
         },
-        "a1000000-0000-4000-8000-000000000008" : {
-          "_id" : "a1000000-0000-4000-8000-000000000008",
-          "_type" : {
-            "_id" : "ValidatedPasswordNode",
-            "collection" : true,
-            "name" : "Platform Password"
-          },
-          "passwordAttribute" : "password",
-          "validateInput" : false
-        }
-      },
-      "nodes" : {
-        "a1000000-0000-4000-8000-000000000009" : {
-          "_id" : "a1000000-0000-4000-8000-000000000009",
-          "_type" : {
-            "_id" : "PageNode",
-            "collection" : true,
-            "name" : "Page Node"
-          },
-          "nodes" : [ {
-            "_id" : "a1000000-0000-4000-8000-000000000007",
-            "nodeType" : "ValidatedUsernameNode",
-            "displayName" : "Platform Username"
-          }, {
-            "_id" : "a1000000-0000-4000-8000-000000000008",
-            "nodeType" : "ValidatedPasswordNode",
-            "displayName" : "Platform Password"
-          } ]
-        },
-        "c3000000-0000-4000-8000-000000000010" : {
-          "_id" : "c3000000-0000-4000-8000-000000000010",
-          "_type" : {
-            "_id" : "IdentityStoreDecisionNode",
-            "collection" : true,
-            "name" : "Identity Store Decision"
+        "c3000000-0000-4000-8000-000000000010": {
+          "_id": "c3000000-0000-4000-8000-000000000010",
+          "_type": {
+            "_id": "IdentityStoreDecisionNode",
+            "collection": true,
+            "name": "Identity Store Decision"
           }
         },
-        "c3000000-0000-4000-8000-000000000011" : {
-          "_id" : "c3000000-0000-4000-8000-000000000011",
-          "_type" : {
-            "_id" : "OneTimePasswordGeneratorNode",
-            "collection" : true,
-            "name" : "HOTP Generator"
+        "c3000000-0000-4000-8000-000000000011": {
+          "_id": "c3000000-0000-4000-8000-000000000011",
+          "_type": {
+            "_id": "OneTimePasswordGeneratorNode",
+            "collection": true,
+            "name": "HOTP Generator"
           },
-          "length" : 6
+          "length": 6
         },
-        "c3000000-0000-4000-8000-000000000012" : {
-          "_id" : "c3000000-0000-4000-8000-000000000012",
-          "_type" : {
-            "_id" : "OneTimePasswordSmtpSenderNode",
-            "collection" : true,
-            "name" : "OTP Email Sender"
+        "c3000000-0000-4000-8000-000000000012": {
+          "_id": "c3000000-0000-4000-8000-000000000012",
+          "_type": {
+            "_id": "OneTimePasswordSmtpSenderNode",
+            "collection": true,
+            "name": "OTP Email Sender"
           },
-          "emailAttribute" : "mail",
-          "emailSubject" : {
-            "en" : "Your code"
+          "emailAttribute": "mail",
+          "emailContent": {
+            "en": "Your code is {{OTP}}."
           },
-          "emailContent" : {
-            "en" : "Your code is {{OTP}}."
+          "emailSubject": {
+            "en": "Your code"
           },
-          "fromEmailAddress" : "noreply@example.test",
-          "hostName" : "smtp.example.test",
-          "hostPort" : 25
+          "fromEmailAddress": "noreply@example.test",
+          "hostName": "smtp.example.test",
+          "hostPort": 25
         },
-        "c3000000-0000-4000-8000-000000000013" : {
-          "_id" : "c3000000-0000-4000-8000-000000000013",
-          "_type" : {
-            "_id" : "OneTimePasswordCollectorDecisionNode",
-            "collection" : true,
-            "name" : "OTP Collector Decision"
+        "c3000000-0000-4000-8000-000000000013": {
+          "_id": "c3000000-0000-4000-8000-000000000013",
+          "_type": {
+            "_id": "OneTimePasswordCollectorDecisionNode",
+            "collection": true,
+            "name": "OTP Collector Decision"
           },
-          "passwordExpiryTime" : 5
+          "passwordExpiryTime": 5
         }
       },
-      "emailTemplates" : { }
+      "saml2Entities": {},
+      "scripts": {},
+      "socialIdentityProviders": {},
+      "themes": [],
+      "tree": {
+        "_id": "EmailOtp",
+        "enabled": true,
+        "entryNodeId": "a1000000-0000-4000-8000-000000000009",
+        "identityResource": "managed/alpha_user",
+        "innerTreeOnly": false,
+        "nodes": {
+          "a1000000-0000-4000-8000-000000000009": {
+            "connections": {
+              "outcome": "c3000000-0000-4000-8000-000000000010"
+            },
+            "displayName": "Page Node",
+            "nodeType": "PageNode",
+            "x": 0,
+            "y": 0
+          },
+          "c3000000-0000-4000-8000-000000000010": {
+            "connections": {
+              "CANCELLED": "e301438c-0bd0-429c-ab0c-66126501069a",
+              "EXPIRED": "e301438c-0bd0-429c-ab0c-66126501069a",
+              "FALSE": "e301438c-0bd0-429c-ab0c-66126501069a",
+              "LOCKED": "e301438c-0bd0-429c-ab0c-66126501069a",
+              "TRUE": "c3000000-0000-4000-8000-000000000011"
+            },
+            "displayName": "Identity Store Decision",
+            "nodeType": "IdentityStoreDecisionNode",
+            "x": 0,
+            "y": 0
+          },
+          "c3000000-0000-4000-8000-000000000011": {
+            "connections": {
+              "outcome": "c3000000-0000-4000-8000-000000000012"
+            },
+            "displayName": "HOTP Generator",
+            "nodeType": "OneTimePasswordGeneratorNode",
+            "x": 0,
+            "y": 0
+          },
+          "c3000000-0000-4000-8000-000000000012": {
+            "connections": {
+              "outcome": "c3000000-0000-4000-8000-000000000013"
+            },
+            "displayName": "OTP Email Sender",
+            "nodeType": "OneTimePasswordSmtpSenderNode",
+            "x": 0,
+            "y": 0
+          },
+          "c3000000-0000-4000-8000-000000000013": {
+            "connections": {
+              "false": "e301438c-0bd0-429c-ab0c-66126501069a",
+              "true": "70e691a5-1e33-4ac3-a356-e7b6d60d92e0"
+            },
+            "displayName": "OTP Collector Decision",
+            "nodeType": "OneTimePasswordCollectorDecisionNode",
+            "x": 0,
+            "y": 0
+          }
+        },
+        "staticNodes": {
+          "70e691a5-1e33-4ac3-a356-e7b6d60d92e0": {
+            "x": 900,
+            "y": 20
+          },
+          "e301438c-0bd0-429c-ab0c-66126501069a": {
+            "x": 900,
+            "y": 120
+          },
+          "startNode": {
+            "x": 0,
+            "y": 0
+          }
+        }
+      }
     }
   }
 }

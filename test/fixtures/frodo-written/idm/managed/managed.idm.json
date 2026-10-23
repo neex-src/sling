@@ -1,0 +1,17 @@
+{
+  "idm": {
+    "managed": {
+      "_id": "managed",
+      "objects": [
+        "file://alpha_user/alpha_user.managed.json"
+      ]
+    }
+  },
+  "meta": {
+    "exportDate": "2026-10-23T13:39:56.851Z",
+    "exportTool": "frodo",
+    "exportToolVersion": "v4.9.3 [v26.11.1]",
+    "origin": "http://localhost:18080/am",
+    "originAmVersion": "8.0.1"
+  }
+}

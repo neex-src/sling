@@ -1,0 +1,1 @@
+openidm.action("external/rest", "call", { url: identityServer.getProperty("esv.orders.url") + "/customers", method: "POST", contentType: "application/json", body: JSON.stringify({ id: newObject._id, mail: newObject.mail }) });

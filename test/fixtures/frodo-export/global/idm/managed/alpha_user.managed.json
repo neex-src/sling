@@ -1,47 +1,47 @@
 {
-  "name" : "alpha_user",
-  "schema" : {
-    "properties" : {
-      "userName" : {
-        "type" : "string"
+  "name": "alpha_user",
+  "onCreate": {
+    "source": "object.mail = String(object.mail || \"\").toLowerCase();\nobject.description = \"created by \" + context.security.authenticationId;",
+    "type": "text/javascript"
+  },
+  "onValidate": {
+    "source": "if (/\\s/.test(String(object.userName))) { throw { code: 403, message: \"Policy validation failed: userName has spaces\" }; }",
+    "type": "text/javascript"
+  },
+  "postCreate": {
+    "source": "openidm.action(\"external/rest\", \"call\", { url: identityServer.getProperty(\"esv.orders.url\") + \"/customers\", method: \"POST\", contentType: \"application/json\", body: JSON.stringify({ id: newObject._id, mail: newObject.mail }) });",
+    "type": "text/javascript"
+  },
+  "schema": {
+    "properties": {
+      "accountStatus": {
+        "type": "string"
       },
-      "mail" : {
-        "type" : "string"
+      "givenName": {
+        "type": "string"
       },
-      "givenName" : {
-        "type" : "string"
+      "mail": {
+        "type": "string"
       },
-      "sn" : {
-        "type" : "string"
-      },
-      "accountStatus" : {
-        "type" : "string"
-      },
-      "preferences" : {
-        "type" : "object",
-        "properties" : {
-          "updates" : {
-            "type" : "boolean",
-            "description" : "Send me news and updates"
+      "preferences": {
+        "properties": {
+          "marketing": {
+            "description": "Send me special offers",
+            "type": "boolean"
           },
-          "marketing" : {
-            "type" : "boolean",
-            "description" : "Send me special offers"
+          "updates": {
+            "description": "Send me news and updates",
+            "type": "boolean"
           }
-        }
+        },
+        "type": "object"
+      },
+      "sn": {
+        "type": "string"
+      },
+      "userName": {
+        "type": "string"
       }
     }
-  },
-  "onCreate" : {
-    "type" : "text/javascript",
-    "source" : "object.mail = String(object.mail || \"\").toLowerCase();\nobject.description = \"created by \" + context.security.authenticationId;"
-  },
-  "onValidate" : {
-    "type" : "text/javascript",
-    "source" : "if (/\\s/.test(String(object.userName))) { throw { code: 403, message: \"Policy validation failed: userName has spaces\" }; }"
-  },
-  "postCreate" : {
-    "type" : "text/javascript",
-    "source" : "openidm.action(\"external/rest\", \"call\", { url: identityServer.getProperty(\"esv.orders.url\") + \"/customers\", method: \"POST\", contentType: \"application/json\", body: JSON.stringify({ id: newObject._id, mail: newObject.mail }) });"
   }
 }

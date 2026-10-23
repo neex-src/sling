@@ -6,13 +6,21 @@
       "innerNodes": {
         "1b5c8a52-6f5d-4a3e-9a51-0d1c2e3f4a01": {
           "_id": "1b5c8a52-6f5d-4a3e-9a51-0d1c2e3f4a01",
-          "_type": {"_id": "ValidatedUsernameNode", "collection": true, "name": "Platform Username"},
+          "_type": {
+            "_id": "ValidatedUsernameNode",
+            "collection": true,
+            "name": "Platform Username"
+          },
           "usernameAttribute": "userName",
           "validateInput": false
         },
         "1b5c8a52-6f5d-4a3e-9a51-0d1c2e3f4a02": {
           "_id": "1b5c8a52-6f5d-4a3e-9a51-0d1c2e3f4a02",
-          "_type": {"_id": "ValidatedPasswordNode", "collection": true, "name": "Platform Password"},
+          "_type": {
+            "_id": "ValidatedPasswordNode",
+            "collection": true,
+            "name": "Platform Password"
+          },
           "passwordAttribute": "password",
           "validateInput": false
         }
@@ -20,48 +28,93 @@
       "nodes": {
         "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b01": {
           "_id": "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b01",
-          "_type": {"_id": "PageNode", "collection": true, "name": "Page Node"},
+          "_type": {
+            "_id": "PageNode",
+            "collection": true,
+            "name": "Page Node"
+          },
           "nodes": [
-            {"_id": "1b5c8a52-6f5d-4a3e-9a51-0d1c2e3f4a01", "displayName": "Platform Username", "nodeType": "ValidatedUsernameNode"},
-            {"_id": "1b5c8a52-6f5d-4a3e-9a51-0d1c2e3f4a02", "displayName": "Platform Password", "nodeType": "ValidatedPasswordNode"}
+            {
+              "_id": "1b5c8a52-6f5d-4a3e-9a51-0d1c2e3f4a01",
+              "displayName": "Platform Username",
+              "nodeType": "ValidatedUsernameNode"
+            },
+            {
+              "_id": "1b5c8a52-6f5d-4a3e-9a51-0d1c2e3f4a02",
+              "displayName": "Platform Password",
+              "nodeType": "ValidatedPasswordNode"
+            }
           ],
           "pageDescription": {},
-          "pageHeader": {"en": "Sign In"}
+          "pageHeader": {
+            "en": "Sign In"
+          }
         },
         "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b02": {
           "_id": "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b02",
-          "_type": {"_id": "IdentityStoreDecisionNode", "collection": true, "name": "Identity Store Decision"},
+          "_type": {
+            "_id": "IdentityStoreDecisionNode",
+            "collection": true,
+            "name": "Identity Store Decision"
+          },
           "minimumPasswordLength": 8,
           "mixedCaseForPasswordChangeMessages": false,
           "useUniversalIdForUsername": false
         },
         "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b03": {
           "_id": "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b03",
-          "_type": {"_id": "RetryLimitDecisionNode", "collection": true, "name": "Retry Limit Decision"},
+          "_type": {
+            "_id": "RetryLimitDecisionNode",
+            "collection": true,
+            "name": "Retry Limit Decision"
+          },
           "incrementUserAttributeOnFailure": false,
           "retryLimit": 3
         },
         "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b04": {
           "_id": "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b04",
-          "_type": {"_id": "AccountLockoutNode", "collection": true, "name": "Account Lockout"},
+          "_type": {
+            "_id": "AccountLockoutNode",
+            "collection": true,
+            "name": "Account Lockout"
+          },
           "lockAction": "LOCK"
         },
         "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b05": {
           "_id": "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b05",
-          "_type": {"_id": "IncrementLoginCountNode", "collection": true, "name": "Increment Login Count"},
+          "_type": {
+            "_id": "IncrementLoginCountNode",
+            "collection": true,
+            "name": "Increment Login Count"
+          },
           "identityAttribute": "userName"
         },
         "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b06": {
           "_id": "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b06",
-          "_type": {"_id": "ScriptedDecisionNode", "collection": true, "name": "Scripted Decision"},
-          "inputs": ["*"],
-          "outcomes": ["member", "guest"],
-          "outputs": ["*"],
+          "_type": {
+            "_id": "ScriptedDecisionNode",
+            "collection": true,
+            "name": "Scripted Decision"
+          },
+          "inputs": [
+            "*"
+          ],
+          "outcomes": [
+            "member",
+            "guest"
+          ],
+          "outputs": [
+            "*"
+          ],
           "script": "5d8f1c2e-3b4a-4c5d-9e6f-7a8b9c0d1e01"
         },
         "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b07": {
           "_id": "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b07",
-          "_type": {"_id": "InnerTreeEvaluatorNode", "collection": true, "name": "Inner Tree Evaluator"},
+          "_type": {
+            "_id": "InnerTreeEvaluatorNode",
+            "collection": true,
+            "name": "Inner Tree Evaluator"
+          },
           "tree": "Preferences"
         }
       },
@@ -77,18 +130,90 @@
         "identityResource": "managed/alpha_user",
         "innerTreeOnly": false,
         "nodes": {
-          "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b01": {"connections": {"outcome": "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b02"}, "displayName": "Page Node", "nodeType": "PageNode", "x": 120, "y": 80},
-          "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b02": {"connections": {"CANCELLED": "e301438c-0bd0-429c-ab0c-66126501069a", "EXPIRED": "e301438c-0bd0-429c-ab0c-66126501069a", "FALSE": "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b03", "LOCKED": "e301438c-0bd0-429c-ab0c-66126501069a", "TRUE": "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b05"}, "displayName": "Identity Store Decision", "nodeType": "IdentityStoreDecisionNode", "x": 320, "y": 80},
-          "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b03": {"connections": {"Reject": "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b04", "Retry": "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b01"}, "displayName": "Retry Limit Decision", "nodeType": "RetryLimitDecisionNode", "x": 520, "y": 180},
-          "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b04": {"connections": {"outcome": "e301438c-0bd0-429c-ab0c-66126501069a"}, "displayName": "Account Lockout", "nodeType": "AccountLockoutNode", "x": 720, "y": 180},
-          "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b05": {"connections": {"outcome": "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b06"}, "displayName": "Increment Login Count", "nodeType": "IncrementLoginCountNode", "x": 520, "y": 40},
-          "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b06": {"connections": {"guest": "70e691a5-1e33-4ac3-a356-e7b6d60d92e0", "member": "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b07"}, "displayName": "Member check", "nodeType": "ScriptedDecisionNode", "x": 720, "y": 40},
-          "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b07": {"connections": {"false": "e301438c-0bd0-429c-ab0c-66126501069a", "true": "70e691a5-1e33-4ac3-a356-e7b6d60d92e0"}, "displayName": "Preferences", "nodeType": "InnerTreeEvaluatorNode", "x": 920, "y": 40}
+          "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b01": {
+            "connections": {
+              "outcome": "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b02"
+            },
+            "displayName": "Page Node",
+            "nodeType": "PageNode",
+            "x": 120,
+            "y": 80
+          },
+          "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b02": {
+            "connections": {
+              "CANCELLED": "e301438c-0bd0-429c-ab0c-66126501069a",
+              "EXPIRED": "e301438c-0bd0-429c-ab0c-66126501069a",
+              "FALSE": "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b03",
+              "LOCKED": "e301438c-0bd0-429c-ab0c-66126501069a",
+              "TRUE": "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b05"
+            },
+            "displayName": "Identity Store Decision",
+            "nodeType": "IdentityStoreDecisionNode",
+            "x": 320,
+            "y": 80
+          },
+          "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b03": {
+            "connections": {
+              "Reject": "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b04",
+              "Retry": "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b01"
+            },
+            "displayName": "Retry Limit Decision",
+            "nodeType": "RetryLimitDecisionNode",
+            "x": 520,
+            "y": 180
+          },
+          "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b04": {
+            "connections": {
+              "outcome": "e301438c-0bd0-429c-ab0c-66126501069a"
+            },
+            "displayName": "Account Lockout",
+            "nodeType": "AccountLockoutNode",
+            "x": 720,
+            "y": 180
+          },
+          "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b05": {
+            "connections": {
+              "outcome": "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b06"
+            },
+            "displayName": "Increment Login Count",
+            "nodeType": "IncrementLoginCountNode",
+            "x": 520,
+            "y": 40
+          },
+          "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b06": {
+            "connections": {
+              "guest": "70e691a5-1e33-4ac3-a356-e7b6d60d92e0",
+              "member": "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b07"
+            },
+            "displayName": "Member check",
+            "nodeType": "ScriptedDecisionNode",
+            "x": 720,
+            "y": 40
+          },
+          "2c6d9b63-7a6e-4b4f-8b62-1e2d3f4a5b07": {
+            "connections": {
+              "false": "e301438c-0bd0-429c-ab0c-66126501069a",
+              "true": "70e691a5-1e33-4ac3-a356-e7b6d60d92e0"
+            },
+            "displayName": "Preferences",
+            "nodeType": "InnerTreeEvaluatorNode",
+            "x": 920,
+            "y": 40
+          }
         },
         "staticNodes": {
-          "70e691a5-1e33-4ac3-a356-e7b6d60d92e0": {"x": 1120, "y": 40},
-          "e301438c-0bd0-429c-ab0c-66126501069a": {"x": 1120, "y": 180},
-          "startNode": {"x": 20, "y": 80}
+          "70e691a5-1e33-4ac3-a356-e7b6d60d92e0": {
+            "x": 1120,
+            "y": 40
+          },
+          "e301438c-0bd0-429c-ab0c-66126501069a": {
+            "x": 1120,
+            "y": 180
+          },
+          "startNode": {
+            "x": 20,
+            "y": 80
+          }
         },
         "uiConfig": {}
       }

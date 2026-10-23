@@ -1,66 +1,81 @@
 {
-  "properties" : [ {
-    "source" : "userName",
-    "target" : "__NAME__"
-  }, {
-    "source" : "givenName",
-    "target" : "firstname"
-  }, {
-    "source" : "sn",
-    "target" : "lastname"
-  }, {
-    "source" : "mail",
-    "target" : "email"
-  }, {
-    "source" : "",
-    "target" : "fullname",
-    "transform" : {
-      "type" : "text/javascript",
-      "globals" : { },
-      "source" : "[source.givenName, source.sn].filter(function (x) { return x; }).join(\" \");"
+  "_id": "sync/alphaUser_systemHrdbAccount",
+  "consentRequired": false,
+  "correlationQuery": [
+    {
+      "linkQualifier": "default",
+      "source": "({ _queryFilter: \"__NAME__ eq \\\"\" + source.userName + \"\\\"\" });",
+      "type": "text/javascript"
     }
-  } ],
-  "correlationQuery" : [ {
-    "linkQualifier" : "default",
-    "type" : "text/javascript",
-    "source" : "({ _queryFilter: \"__NAME__ eq \\\"\" + source.userName + \"\\\"\" });"
-  } ],
-  "displayName" : "Users to the HR database",
-  "consentRequired" : false,
-  "name" : "alphaUser_systemHrdbAccount",
-  "policies" : [ {
-    "situation" : "ABSENT",
-    "action" : "CREATE"
-  }, {
-    "situation" : "CONFIRMED",
-    "action" : "UPDATE"
-  }, {
-    "situation" : "FOUND",
-    "action" : "UPDATE"
-  }, {
-    "situation" : "UNQUALIFIED",
-    "action" : "DELETE"
-  }, {
-    "situation" : "SOURCE_MISSING",
-    "action" : "DELETE"
-  }, {
-    "situation" : "MISSING",
-    "action" : "CREATE"
-  } ],
-  "onCreate" : {
-    "type" : "text/javascript",
-    "globals" : { },
-    "source" : "target.organization = \"WEB\";"
+  ],
+  "displayName": "Users to the HR database",
+  "enableSync": {
+    "$bool": "&{esv.hrdb.sync}"
   },
-  "source" : "managed/alpha_user",
-  "_id" : "sync/alphaUser_systemHrdbAccount",
-  "target" : "system/HRDB/__ACCOUNT__",
-  "validSource" : {
-    "type" : "text/javascript",
-    "globals" : { },
-    "source" : "source.accountStatus === \"active\";"
+  "name": "alphaUser_systemHrdbAccount",
+  "onCreate": {
+    "globals": {},
+    "source": "target.organization = \"WEB\";",
+    "type": "text/javascript"
   },
-  "enableSync" : {
-    "$bool" : "&{esv.hrdb.sync}"
+  "policies": [
+    {
+      "action": "CREATE",
+      "situation": "ABSENT"
+    },
+    {
+      "action": "UPDATE",
+      "situation": "CONFIRMED"
+    },
+    {
+      "action": "UPDATE",
+      "situation": "FOUND"
+    },
+    {
+      "action": "DELETE",
+      "situation": "UNQUALIFIED"
+    },
+    {
+      "action": "DELETE",
+      "situation": "SOURCE_MISSING"
+    },
+    {
+      "action": "CREATE",
+      "situation": "MISSING"
+    }
+  ],
+  "properties": [
+    {
+      "source": "userName",
+      "target": "__NAME__"
+    },
+    {
+      "source": "givenName",
+      "target": "firstname"
+    },
+    {
+      "source": "sn",
+      "target": "lastname"
+    },
+    {
+      "source": "mail",
+      "target": "email"
+    },
+    {
+      "source": "",
+      "target": "fullname",
+      "transform": {
+        "globals": {},
+        "source": "[source.givenName, source.sn].filter(function (x) { return x; }).join(\" \");",
+        "type": "text/javascript"
+      }
+    }
+  ],
+  "source": "managed/alpha_user",
+  "target": "system/HRDB/__ACCOUNT__",
+  "validSource": {
+    "globals": {},
+    "source": "source.accountStatus === \"active\";",
+    "type": "text/javascript"
   }
 }

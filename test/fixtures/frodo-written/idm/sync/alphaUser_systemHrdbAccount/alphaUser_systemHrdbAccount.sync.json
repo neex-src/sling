@@ -1,0 +1,81 @@
+{
+  "_id": "sync/alphaUser_systemHrdbAccount",
+  "consentRequired": false,
+  "correlationQuery": [
+    {
+      "linkQualifier": "default",
+      "source": "file://correlationQuery.0.js",
+      "type": "text/javascript"
+    }
+  ],
+  "displayName": "Users to the HR database",
+  "enableSync": {
+    "$bool": "&{esv.hrdb.sync}"
+  },
+  "name": "alphaUser_systemHrdbAccount",
+  "onCreate": {
+    "globals": {},
+    "source": "file://onCreate.js",
+    "type": "text/javascript"
+  },
+  "policies": [
+    {
+      "action": "CREATE",
+      "situation": "ABSENT"
+    },
+    {
+      "action": "UPDATE",
+      "situation": "CONFIRMED"
+    },
+    {
+      "action": "UPDATE",
+      "situation": "FOUND"
+    },
+    {
+      "action": "DELETE",
+      "situation": "UNQUALIFIED"
+    },
+    {
+      "action": "DELETE",
+      "situation": "SOURCE_MISSING"
+    },
+    {
+      "action": "CREATE",
+      "situation": "MISSING"
+    }
+  ],
+  "properties": [
+    {
+      "source": "userName",
+      "target": "__NAME__"
+    },
+    {
+      "source": "givenName",
+      "target": "firstname"
+    },
+    {
+      "source": "sn",
+      "target": "lastname"
+    },
+    {
+      "source": "mail",
+      "target": "email"
+    },
+    {
+      "source": "",
+      "target": "fullname",
+      "transform": {
+        "globals": {},
+        "source": "file://SOURCE.fullname.transform.js",
+        "type": "text/javascript"
+      }
+    }
+  ],
+  "source": "managed/alpha_user",
+  "target": "system/HRDB/__ACCOUNT__",
+  "validSource": {
+    "globals": {},
+    "source": "file://validSource.js",
+    "type": "text/javascript"
+  }
+}
