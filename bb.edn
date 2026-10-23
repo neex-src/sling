@@ -1,5 +1,5 @@
 {:tasks
- {serve     {:doc "Start the fake tenant: bb serve [port] [tenant-dir] | --frodo <export> --services <edn> --modules oauth,idm,am,esv,journeys --token-format jwt|opaque"
+ {serve     {:doc "Start the fake tenant: bb serve [port] [tenant-dir] | --frodo <export> --services <edn> --bind 0.0.0.0 --public-url <url> --modules oauth,idm,am,esv,journeys --token-format jwt|opaque"
              :task (apply shell "clojure" "-M" "-m" "sling.server" *command-line-args*)}
   coverage  {:doc "What of a Frodo export runs here, and what blocks the rest: bb coverage <export-dir> [realm]"
              :task (apply shell "clojure" "-M" "-m" "sling.frodo" *command-line-args*)}

@@ -213,17 +213,18 @@
 
 (defn start!
   "Start the fake tenant. opts:
-    :port 8080 (0 = any)  :dir \"tenant\"  :realm \"alpha\"  :frodo nil (a Frodo export to load instead)
+    :port 8080 (0 = any)  :bind \"127.0.0.1\" (0.0.0.0 for containers; set :public-url to what they see)
+    :dir \"tenant\"  :realm \"alpha\"  :frodo nil (a Frodo export to load instead)
     :services nil (path of a services.edn to use instead of <dir>/services.edn)
     :modules all-modules  :public-url \"http://127.0.0.1:<port>\"  :token-format :jwt | :opaque
     :cookie-name \"iPlanetDirectoryPro\"  :dev-token \"local-dev\"  :access-ttl 3600
   Returns the server map (atoms :tenant :sessions :sso :tokens :codes :idm); stop with (stop! it)."
-  [{:keys [port dir realm frodo services] :or {port 8080 dir "tenant" realm "alpha"} :as o}]
-  (let [http (HttpServer/create (InetSocketAddress. "127.0.0.1" (int port)) 0)
+  [{:keys [port bind dir realm frodo services] :or {port 8080 bind "127.0.0.1" dir "tenant" realm "alpha"} :as o}]
+  (let [http (HttpServer/create (InetSocketAddress. ^String bind (int port)) 0)
         port (.getPort (.getAddress http))
         opts (merge {:modules all-modules :public-url (str "http://127.0.0.1:" port) :token-format :jwt
                      :cookie-name "iPlanetDirectoryPro" :dev-token "local-dev"}
-                    (dissoc o :port :dir :realm :services))
+                    (dissoc o :port :bind :dir :realm :services))
         t (if frodo (frodo/load-tenant frodo realm) (store/load-tenant dir realm))
         t (cond-> t services (update :services merge (edn/read-string (slurp services))))
         idm (seed-identities (:services t) realm)
@@ -240,7 +241,7 @@
 (defn stop! [{:keys [server]}] (.stop ^HttpServer server 0))
 
 (defn- cli-opts
-  "--port 8080 --dir tenant --frodo <export> --services <edn> --modules oauth,idm --realm alpha
+  "--port 8080 --bind 127.0.0.1 --dir tenant --frodo <export> --services <edn> --modules oauth,idm --realm alpha
   --token-format jwt|opaque --public-url <url> --cookie-name <name>; bare args are port then dir."
   [args]
   (loop [[a b & more :as as] args o {} bare []]
