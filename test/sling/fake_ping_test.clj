@@ -450,3 +450,19 @@
       (is (= [["toma" "toma@members.test"]]
              (mapv (juxt :__NAME__ :email) (vals (get @(:idm *srv*) "system/HRDB/__ACCOUNT__"))))
           "found the existing row and updated it, no second row"))))
+
+(deftest idm-config-over-rest
+  (let [bearer {"Authorization" "Bearer local-dev"}]
+    (testing "PUT a custom endpoint (as frodo idm import does) and it runs"
+      (is (= 200 (:status (call "PUT" "/openidm/config/endpoint/hello" :headers bearer
+                                :body {:type "text/javascript" :source "({ hello: request.additionalParameters.name });"}))))
+      (is (= {:hello "you"} (:body (call "GET" "/openidm/endpoint/hello" :query {"name" "you"} :headers bearer)))))
+    (testing "PUT managed replaces the object scripts"
+      (let [managed (:body (call "GET" "/openidm/config/managed" :headers bearer))
+            changed (update managed :objects (fn [os] (mapv #(assoc % :onCreate {:type "text/javascript" :source "object.sn = 'FROM CONFIG';"}) os)))]
+        (call "PUT" "/openidm/config/managed" :headers bearer :body changed)
+        (is (= "FROM CONFIG" (get-in (call "POST" "/openidm/managed/alpha_user" :query {"_action" "create"} :headers bearer
+                                           :body {:userName "cfg"}) [:body :sn])))))
+    (testing "the listing Frodo exports from"
+      (is (= #{"endpoint/orderSummary" "endpoint/hello" "managed" "sync"}
+             (set (map :_id (get-in (call "GET" "/openidm/config" :query {"_queryFilter" "true"} :headers bearer) [:body :result]))))))))

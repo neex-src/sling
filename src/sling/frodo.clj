@@ -17,11 +17,26 @@
   (:require [cheshire.core :as json]
             [clojure.java.io :as io]
             [clojure.string :as str]
+            [clojure.walk]
             [sling.engine :as engine]
             [sling.mfa]
             [sling.nodes]))
 
 (defn- read-json [f] (json/parse-string (slurp f) true))
+
+(defn- inline-scripts
+  "Frodo extracts IDM scripts into files ({:source \"file://onCreate.js\"} next to the JSON);
+  put their text back, at any depth."
+  [f x]
+  (clojure.walk/postwalk
+   (fn [v]
+     (if (and (map? v) (string? (:source v)) (str/starts-with? (:source v) "file://"))
+       (let [g (io/file (.getParentFile f) (subs (:source v) 7))]
+         (if (.exists g) (assoc v :source (slurp g)) v))
+       v))
+   x))
+
+(defn- read-config [f] (inline-scripts f (read-json f)))
 
 (defn- files-ending [dir suffix]
   (->> (file-seq (io/file dir))
@@ -77,13 +92,13 @@
                              [id c] (:application (read-json f))]
                          [(clojure.core/name id) c]))
      :managed-schemas (into {} (for [f (files-ending root ".managed.json") :when (keep? f)
-                                     :let [m (read-json f)]
+                                     :let [m (read-config f)]
                                      o (or (get-in m [:idm :managed :objects]) (when (:name m) [m])
                                            (some-> (:idm m) vals first :objects))
                                      :when (:name o)]
                                  [(:name o) o]))
      :idm-endpoints (into {} (for [f (files-ending root ".idm.json") :when (keep? f)
-                                   [id cfg] (:idm (read-json f))
+                                   [id cfg] (:idm (read-config f))
                                    :let [id (subs (str id) 1)]
                                    :when (str/starts-with? id "endpoint/")]
                                [(subs id 9) (cond-> cfg (and (nil? (:source cfg)) (:file cfg))
@@ -93,7 +108,7 @@
                                  [(clojure.core/name id) t]))
      :mappings (let [named (into {} (for [f (concat (files-ending root ".sync.json") (files-ending root ".mapping.json"))
                                           :when (keep? f)
-                                          :let [m (read-json f)
+                                          :let [m (read-config f)
                                                 m (if (:idm m) (first (vals (:idm m))) m)]
                                           :when (and (:name m) (:source m))]
                                       [(:name m) m]))]
@@ -101,6 +116,11 @@
      :email-templates (into {} (for [f (files-ending root ".emailTemplate.json") :when (keep? f)
                                      [id t] (:emailTemplate (read-json f))]
                                  [(clojure.core/name id) t]))
+     :idm-config (into {} (for [f (files-ending root ".idm.json") :when (keep? f)
+                                [id cfg] (:idm (read-json f))
+                                :let [id (subs (str id) 1)]
+                                :when (not (or (str/starts-with? id "endpoint/") (#{"sync" "managed"} id)))]
+                            [id cfg]))
      :services {:esv (into {} variables) :default-journey "Login"}}))
 
 ;; ---- coverage ------------------------------------------------------------------------------

@@ -164,7 +164,6 @@
      [(re-pattern (str tre "trees(?:/([^/]+))?$")) :journeys :trees]
      [(re-pattern (str tre "nodes/([^/]+)(?:/([0-9.]+))?/([^/]+)$")) :journeys :nodes]
      [(re-pattern (str pre "realm-config/(federation/circlesoftrust|saml2|services/SocialIdentityProviders)$")) :journeys :empty]
-     [#"^/openidm/config/ui/themerealm$" :journeys :themes]
      [(re-pattern (str pre "scripts(?:/([^/]+))?$")) :journeys :scripts]
      [#"^/am/oauth2(?:/realms/root/realms/([^/]+))?/(.+)$" :oauth :oauth]
      [#"^/am/XUI/?$" :am :login-page]
@@ -172,6 +171,8 @@
      [#"^/openidm/endpoint/([^/]+)(?:/(.+))?$" :idm :endpoint]
      [#"^/openidm/system/([^/]+)/([^/]+)(?:/([^/]+))?$" :idm :system]
      [#"^/openidm/recon$" :idm :recon]
+     [#"^/openidm/config(?:/(.+))?$" :idm :config]
+     [#"^/openidm/system$" :idm :system-actions]
      [#"^/sling/sync$" :am :sync-log]
      [#"^/sling/outbox$" :am :outbox]
      [#"^/environment/(variables|secrets)(?:/([^/]+))?$" :esv :env]]))
@@ -200,7 +201,6 @@
             :login-page (am/login-page req)
             ;; what a journey export also reads; this tenant has none of them
             :empty (if (allowed? srv req "fr:am:*") (web/json 200 {:result [] :resultCount 0}) (deny srv req))
-            :themes (if (allowed? srv req "fr:idm:*") (web/json 200 {:_id "ui/themerealm" :realm {(keyword realm) []}}) (deny srv req))
             :idm (if (allowed? srv req "fr:idm:*")
                    (openidm/handle-managed (:openidm srv) (idm-context srv req realm) req (nth m 1) (nth m 2))
                    (deny srv req))
@@ -216,6 +216,9 @@
                      (try (web/json 200 (openidm/recon (:openidm srv) (idm-context srv req realm) (web/param req "mapping")))
                           (catch clojure.lang.ExceptionInfo e (web/error (or (:code (ex-data e)) 400) (ex-message e))))
                      (deny srv req))
+            :config (if (allowed? srv req "fr:idm:*") (openidm/handle-config (:openidm srv) req (second m)) (deny srv req))
+            ;; Frodo asks after the connector servers; this tenant has none connected
+            :system-actions (if (allowed? srv req "fr:idm:*") (web/json 200 {:openicf []}) (deny srv req))
             :sync-log (web/json 200 {:result @(:sync-log (:openidm srv)) :links @(:links (:openidm srv))})
             :outbox (if (= "DELETE" (:method req))
                       (do (reset! (get-in @(:tenant srv) [:services :outbox]) []) (web/json 200 {:result []}))

@@ -398,3 +398,49 @@
         ["delete" true] (out 200 (delete-obj env ctx 0 type id))
         (web/error 405 (str (:method req) (when id (str " on one object")))))
       (catch clojure.lang.ExceptionInfo e (web/error (or (:code (ex-data e)) 400) (ex-message e))))))
+
+;; ---- configuration (/openidm/config) -------------------------------------------------------
+
+(defn apply-config
+  "The tenant after config object `id` is set to `obj` (nil = deleted): the raw store, plus the
+  parts that run: endpoint/<n> -> endpoints, managed -> managed object schemas and their
+  scripts, sync and mapping/<n> -> mappings."
+  [t id obj]
+  (let [t (if obj (assoc-in t [:idm-config id] (assoc obj :_id id)) (update t :idm-config dissoc id))]
+    (cond
+      (str/starts-with? id "endpoint/") (if obj (assoc-in t [:idm-endpoints (subs id 9)] obj) (update t :idm-endpoints dissoc (subs id 9)))
+      (= id "managed") (assoc t :managed-schemas (into {} (for [o (:objects obj)] [(:name o) o])))
+      (= id "sync") (assoc t :mappings (vec (filter map? (:mappings obj))))
+      (str/starts-with? id "mapping/") (update t :mappings (fn [ms] (cond-> (vec (remove #(= (:name %) (subs id 8)) ms))
+                                                                      obj (conj (assoc obj :name (or (:name obj) (subs id 8)))))))
+      :else t)))
+
+(defn config-view
+  "Config object `id` as GET answers it, built from the running parts when it has no stored form."
+  [t id]
+  (or (get-in t [:idm-config id])
+      (cond
+        (str/starts-with? id "endpoint/") (some-> (get-in t [:idm-endpoints (subs id 9)]) (assoc :_id id))
+        (= id "managed") (when (seq (:managed-schemas t)) {:_id "managed" :objects (vec (vals (:managed-schemas t)))})
+        (= id "sync") (when (seq (:mappings t)) {:_id "sync" :mappings (:mappings t)})
+        (str/starts-with? id "mapping/") (some-> (first (filter #(= (:name %) (subs id 8)) (:mappings t))) (assoc :_id id))
+        (= id "ui/themerealm") {:_id "ui/themerealm" :realm {(keyword (get-in t [:services :realm] "alpha")) []}})))
+
+(defn handle-config
+  "/openidm/config[/<id>] over REST: what Frodo's idm export and import use."
+  [env req id]
+  (let [tenant (:tenant env)]
+    (case [(:method req) (some? id)]
+      ["GET" false] (let [t @tenant
+                          ids (distinct (concat (keys (:idm-config t)) (map #(str "endpoint/" %) (keys (:idm-endpoints t)))
+                                                (when (seq (:managed-schemas t)) ["managed"]) (when (seq (:mappings t)) ["sync"])))
+                          objs (keep #(config-view t %) ids)]
+                      (web/json 200 (if (web/param req "_queryFilter")
+                                      {:result (vec objs) :resultCount (count objs)}
+                                      {:_id "" :configurations (mapv #(hash-map :_id (:_id %) :pid (:_id %) :factoryPid nil) objs)})))
+      ["GET" true] (if-let [o (config-view @tenant id)] (web/json 200 o) (web/error 404 (str "config " id " not found")))
+      ["PUT" true] (do (swap! tenant apply-config id (web/json-body req)) (web/json 200 (config-view @tenant id)))
+      ["DELETE" true] (if-let [o (config-view @tenant id)]
+                        (do (swap! tenant apply-config id nil) (web/json 200 o))
+                        (web/error 404 (str "config " id " not found")))
+      (web/error 405 (str (:method req) " on config")))))
