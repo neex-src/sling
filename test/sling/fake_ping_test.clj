@@ -344,3 +344,54 @@
         (is (= 200 (:status (call "POST" auth :body {:authId (get-in r2 [:body :authId]) :callbacks (engine/answer cbs ["New-pw-456"])}))))
         (is (= 200 (:status (login* "ana" "New-pw-456"))))
         (is (= 401 (:status (call "POST" auth :query {"suspendedId" sid}))) "a link works once")))))
+
+(defn- json-server
+  "Serve one JSON document on a real local port (a jwks_uri, say)."
+  [doc]
+  (let [s (com.sun.net.httpserver.HttpServer/create (java.net.InetSocketAddress. "127.0.0.1" 0) 0)]
+    (.createContext s "/" (reify com.sun.net.httpserver.HttpHandler
+                            (handle [_ ex]
+                              (let [out (.getBytes (json/generate-string doc))]
+                                (.sendResponseHeaders ex 200 (count out))
+                                (with-open [o (.getResponseBody ex)] (.write o out))))))
+    (.start s)
+    s))
+
+(deftest clients-with-key-pairs
+  (let [k (jwt/new-key "batch-1")
+        token-url (str (get-in *srv* [:opts :public-url]) oauth "/access_token")
+        jwks-srv (json-server (jwt/jwks k))
+        assertion (fn [key] (jwt/sign key {:iss "orders-batch" :sub "orders-batch" :aud token-url
+                                           :exp (+ (jwt/now) 60) :jti (str (random-uuid))}))
+        grant (fn [a] (call "POST" (str oauth "/access_token")
+                            :form {:grant_type "client_credentials" :scope "orders:write"
+                                   :client_assertion_type "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+                                   :client_assertion a}))]
+    (try
+      (doseq [[how cfg] {"inline JWK set" {:jwkSet (json/generate-string (jwt/jwks k)) :publicKeyLocation "jwks"}
+                         "jwks_uri on our own service" {:jwksUri (str "http://127.0.0.1:" (.getPort (.getAddress jwks-srv)) "/jwks")
+                                                        :publicKeyLocation "jwks_uri"}}]
+        (swap! (:tenant *srv*) assoc-in [:clients "orders-batch"]
+               {:coreOAuth2ClientConfig {:clientType "Confidential" :scopes ["orders:write"]}
+                :advancedOAuth2ClientConfig {:grantTypes ["client_credentials"] :tokenEndpointAuthMethod "private_key_jwt"}
+                :signEncOAuth2ClientConfig cfg})
+        (testing (str "private_key_jwt, " how)
+          (is (= 200 (:status (grant (assertion k)))))
+          (is (= 401 (:status (grant (assertion (jwt/new-key "batch-1"))))) "someone else's key")))
+      (finally (.stop jwks-srv 0)))))
+
+(deftest trusted-issuer-jwt-grant
+  (let [k (jwt/new-key "idp-1")
+        aud (str (get-in *srv* [:opts :public-url]) oauth "/access_token")
+        jwt (fn [claims] (jwt/sign k (merge {:iss "https://idp.example.test" :sub "ana" :aud aud :exp (+ (jwt/now) 60) :scope ["openid"]} claims)))
+        grant (fn [a] (call "POST" (str oauth "/access_token") :headers (basic "orders-service" "orders-secret")
+                            :form {:grant_type "urn:ietf:params:oauth:grant-type:jwt-bearer" :assertion a :scope "openid"}))]
+    (swap! (:tenant *srv*) assoc :trusted-issuers {"idp" {:issuer "https://idp.example.test" :jwkSet (json/generate-string (jwt/jwks k))
+                                                         :consentedScopesClaim "scope" :allowedSubjects []}})
+    (swap! (:tenant *srv*) update-in [:services :clients "orders-service" :grantTypes]
+           (constantly ["client_credentials" "password" "urn:ietf:params:oauth:grant-type:jwt-bearer"]))
+    (let [r (grant (jwt {}))]
+      (is (= 200 (:status r)))
+      (is (= "3f9a2b1c-0000-4000-8000-000000000001" (:sub (:claims (jwt/decode (get-in r [:body :access_token])))))))
+    (is (re-find #"no trusted JWT issuer" (get-in (grant (jwt {:iss "https://evil.test"})) [:body :error_description])))
+    (is (= "invalid_scope" (get-in (grant (jwt {:scope ["profile"]})) [:body :error])) "scope not consented in the assertion")))

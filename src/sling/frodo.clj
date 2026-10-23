@@ -87,6 +87,9 @@
                                    :when (str/starts-with? id "endpoint/")]
                                [(subs id 9) (cond-> cfg (and (nil? (:source cfg)) (:file cfg))
                                               (assoc :source (source-of f (str "file://" (:file cfg)))))]))
+     :trusted-issuers (into {} (for [f (files-ending root ".trustedJwtIssuer.json") :when (keep? f)
+                                     [id t] (:trustedJwtIssuer (read-json f))]
+                                 [(clojure.core/name id) t]))
      :email-templates (into {} (for [f (files-ending root ".emailTemplate.json") :when (keep? f)
                                      [id t] (:emailTemplate (read-json f))]
                                  [(clojure.core/name id) t]))

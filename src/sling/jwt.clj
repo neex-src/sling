@@ -1,13 +1,15 @@
 (ns sling.jwt
-  "RS256 JSON Web Tokens with the JDK alone: one RSA key per server, its JWK set, signing, and
-  checking a token against a JWK set (ours, a client's or a service account's).
+  "JSON Web Tokens with the JDK alone: one RSA key per server, its JWK set, RS256 signing, and
+  checking a token (RS*, PS256, ES*) against a JWK set: ours, a client's, a service account's or a
+  trusted issuer's.
 
   A key is {:kid s :private PrivateKey :public RSAPublicKey}. Verification answers
   {:ok claims} or {:error why}; it never throws on bad input."
   (:require [cheshire.core :as json]
             [clojure.string :as str])
   (:import (java.math BigInteger)
-           (java.security KeyFactory KeyPairGenerator Signature)
+           (java.security AlgorithmParameters KeyFactory KeyPairGenerator Signature)
+           (java.security.spec ECGenParameterSpec ECParameterSpec ECPoint ECPublicKeySpec MGF1ParameterSpec PSSParameterSpec)
            (java.security.interfaces RSAPublicKey)
            (java.security.spec RSAPublicKeySpec)
            (java.util Base64 UUID)))
@@ -36,9 +38,37 @@
 
 (defn jwks [& keys] {:keys (mapv public-jwk keys)})
 
-(defn- jwk->public [{:keys [n e]}]
-  (.generatePublic (KeyFactory/getInstance "RSA")
-                   (RSAPublicKeySpec. (BigInteger. 1 (unb64url n)) (BigInteger. 1 (unb64url e)))))
+(defn- jwk->public [{:keys [kty n e crv x y]}]
+  (if (= "EC" kty)
+    (let [params (.getParameterSpec (doto (AlgorithmParameters/getInstance "EC")
+                                      (.init (ECGenParameterSpec. (case crv "P-384" "secp384r1" "P-521" "secp521r1" "secp256r1"))))
+                                    ECParameterSpec)]
+      (.generatePublic (KeyFactory/getInstance "EC")
+                       (ECPublicKeySpec. (ECPoint. (BigInteger. 1 (unb64url x)) (BigInteger. 1 (unb64url y))) params)))
+    (.generatePublic (KeyFactory/getInstance "RSA")
+                     (RSAPublicKeySpec. (BigInteger. 1 (unb64url n)) (BigInteger. 1 (unb64url e))))))
+
+(def ^:private algs
+  {"RS256" "SHA256withRSA" "RS384" "SHA384withRSA" "RS512" "SHA512withRSA"
+   "PS256" "RSASSA-PSS" "ES256" "SHA256withECDSA" "ES384" "SHA384withECDSA" "ES512" "SHA512withECDSA"})
+
+(defn- der
+  "A JWS ECDSA signature (R||S) as the DER sequence the JDK verifies."
+  [^bytes raw]
+  (let [half (quot (count raw) 2)
+        int-der (fn [bs] (let [v (.toByteArray (BigInteger. 1 bs))] (byte-array (concat [2 (count v)] v))))
+        r (int-der (java.util.Arrays/copyOfRange raw 0 half))
+        s (int-der (java.util.Arrays/copyOfRange raw half (count raw)))
+        body (byte-array (concat r s))
+        len (count body)]
+    (byte-array (concat [0x30] (if (< len 128) [len] [0x81 len]) body))))
+
+(defn- sig-ok? [alg k ^String input ^bytes sig]
+  (let [sg (doto (Signature/getInstance (algs alg))
+             (cond-> (= alg "PS256") (.setParameter (PSSParameterSpec. "SHA-256" "MGF1" MGF1ParameterSpec/SHA256 32 1))))]
+    (.initVerify sg (jwk->public k))
+    (.update sg (.getBytes input "UTF-8"))
+    (.verify sg (if (str/starts-with? alg "ES") (der sig) sig))))
 
 (defn sign
   "Compact JWS of `claims` with `key`. `header` adds to {alg typ kid}."
@@ -64,7 +94,7 @@
 (defn now [] (quot (System/currentTimeMillis) 1000))
 
 (defn verify
-  "Check signature (RS256 against `jwk-set`, picked by kid when the token names one) and exp/nbf.
+  "Check signature (RS*/PS256/ES* against `jwk-set`, picked by kid when the token names one) and exp/nbf.
   Optional :aud and :iss must then match."
   [token jwk-set & {:keys [aud iss]}]
   (if-let [{:keys [header claims input sig]} (decode token)]
@@ -72,13 +102,9 @@
           k (or (first (filter #(= (:kid %) (:kid header)) ks)) (when (nil? (:kid header)) (first ks)))
           auds (let [a (:aud claims)] (set (if (sequential? a) a [a])))]
       (cond
-        (not= "RS256" (:alg header)) {:error (str "alg " (:alg header) " not accepted, only RS256")}
+        (not (algs (:alg header))) {:error (str "alg " (:alg header) " not accepted")}
         (nil? k) {:error (str "no key with kid " (pr-str (:kid header)))}
-        (not (try (.verify (doto (Signature/getInstance "SHA256withRSA")
-                             (.initVerify (jwk->public k))
-                             (.update (.getBytes ^String input "UTF-8")))
-                           (unb64url sig))
-                  (catch Exception _ false)))
+        (not (try (sig-ok? (:alg header) k input (unb64url sig)) (catch Exception _ false)))
         {:error "bad signature"}
         (and (:exp claims) (< (:exp claims) (now))) {:error "expired"}
         (and (:nbf claims) (> (:nbf claims) (+ (now) 5))) {:error "not yet valid"}

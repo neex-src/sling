@@ -23,6 +23,7 @@
             [sling.engine :as engine]
             [sling.idm :as idm]
             [sling.jwt :as jwt]
+            [sling.outside :as outside]
             [sling.web :as web])
   (:import (java.security MessageDigest)
            (java.util UUID)))
@@ -52,7 +53,8 @@
             :redirect-uris (vec (v (:redirectionUris core)))
             :grant-types (vec (or (v (:grantTypes adv)) ["authorization_code"]))
             :auth-method (or (v (:tokenEndpointAuthMethod adv)) "client_secret_basic")
-            :jwks (some-> (v (:jwkSet sig)) (json/parse-string true))
+            :jwks (when-not (= "jwks_uri" (v (:publicKeyLocation sig))) (some-> (v (:jwkSet sig)) (json/parse-string true)))
+            :jwks-uri (when (= "jwks_uri" (v (:publicKeyLocation sig))) (v (:jwksUri sig)))
             :access-ttl (let [t (v (:accessTokenLifetime core))] (when (and t (pos? t)) t))}
            (when local
              (cond-> {}
@@ -67,6 +69,24 @@
 (defn clients [t]
   (let [ids (into (set (keys (:clients t))) (keys (get-in t [:services :clients])))]
     (into {} (for [id ids] [id (client-view id (get-in t [:clients id]) (get-in t [:services :clients id]))]))))
+
+(defn key-set
+  "The JWK set of a client or trusted issuer: inline, or fetched from its jwks URI (through
+  sling.outside, so a fake or a local service answers)."
+  [srv {:keys [jwks jwks-uri]}]
+  (or jwks
+      (when jwks-uri
+        (let [r (outside/http (:services @(:tenant srv)) {:uri jwks-uri :method "GET"})]
+          (when (= 200 (:status r)) (json/parse-string (:body r) true))))))
+
+(defn- assertion-ok?
+  "RFC 7523 client authentication: signed by the client's key, iss = sub = client_id, aud = the
+  token endpoint (or the issuer)."
+  [srv realm c assertion]
+  (let [ks (key-set srv c)
+        claims (some-> assertion jwt/decode :claims)]
+    (and ks (= (:id c) (:iss claims) (:sub claims))
+         (some #(:ok (jwt/verify assertion ks :aud %)) [(str (issuer srv realm) "/access_token") (issuer srv realm)]))))
 
 (defn- authenticate-client
   "{:client c} or {:error response}. Accepts client_secret_basic, client_secret_post,
@@ -84,8 +104,7 @@
       (nil? c) {:error bad}
       bid (if (= bsecret (:secret c)) {:client c} {:error bad})
       (f "client_secret") (if (= (f "client_secret") (:secret c)) {:client c} {:error bad})
-      assertion (if (and (:jwks c) (:ok (jwt/verify assertion (:jwks c) :aud (str (issuer srv realm) "/access_token"))))
-                  {:client c} {:error bad})
+      assertion (if (assertion-ok? srv realm c assertion) {:client c} {:error bad})
       (= "Public" (:type c)) {:client c}
       :else {:error bad})))
 
@@ -239,6 +258,32 @@
                                             :scope scope :grant "urn:ietf:params:oauth:grant-type:jwt-bearer"})
                                 :refresh_token)))))))
 
+(defn- trusted-issuer-grant
+  "RFC 7523 authorization grant: an assertion from a trusted JWT issuer (realm-config
+  TrustedJwtIssuer) names the resource owner; the client gets a token for them."
+  [srv realm client req]
+  (let [assertion (web/form1 req "assertion")
+        claims (:claims (jwt/decode assertion))
+        v #(if (and (map? %) (contains? % :value)) (:value %) %)
+        ti (first (filter #(= (:iss claims) (v (:issuer %))) (vals (:trusted-issuers @(:tenant srv)))))
+        ks (when ti (key-set srv {:jwks (some-> (v (:jwkSet ti)) (#(if (string? %) (json/parse-string % true) %)))
+                                  :jwks-uri (v (:jwksUri ti))}))
+        check (when ks (jwt/verify assertion ks :aud [(str (issuer srv realm) "/access_token") (issuer srv realm)]))
+        owner (get claims (keyword (or (v (:resourceOwnerIdentityClaim ti)) "sub")))
+        allowed (seq (v (:allowedSubjects ti)))
+        consented (let [c (get claims (keyword (or (v (:consentedScopesClaim ti)) "scope")))]
+                    (when c (set (if (string? c) (str/split c #"\s+") c))))]
+    (cond
+      (nil? ti) (web/oauth-error 400 "invalid_grant" (str "no trusted JWT issuer for " (pr-str (:iss claims))))
+      (or (nil? check) (:error check)) (web/oauth-error 400 "invalid_grant" (str "assertion refused: " (or (:error check) "no keys")))
+      (and allowed (not (some #{owner} allowed))) (web/oauth-error 400 "invalid_grant" (str "subject " owner " is not allowed"))
+      :else
+      (if-let [scope (grant-scope (cond->> (:scopes client) consented (filter consented)) (:default-scopes client) (web/form1 req "scope"))]
+        (let [u (or (idm/read-obj (:idm srv) (str realm "_user") owner) (user-by-name srv realm owner))]
+          (web/json 200 (issue srv {:client client :realm realm :sub (or (:_id u) owner) :subname (or (:_id u) owner)
+                                    :scope scope :grant "urn:ietf:params:oauth:grant-type:jwt-bearer" :user u})))
+        (web/oauth-error 400 "invalid_scope" "Unknown/invalid scope(s)")))))
+
 (defn- token-endpoint [srv realm req]
   (let [grant (web/form1 req "grant_type")]
     (if (and (= grant "urn:ietf:params:oauth:grant-type:jwt-bearer") (= "service-account" (web/form1 req "client_id")))
@@ -258,6 +303,7 @@
             "password" (password-grant srv realm client req)
             "authorization_code" (code-grant srv realm client req)
             "refresh_token" (refresh-grant srv realm client req)
+            "urn:ietf:params:oauth:grant-type:jwt-bearer" (trusted-issuer-grant srv realm client req)
             (web/oauth-error 400 "unsupported_grant_type" (str "grant_type " (pr-str grant) " is not supported here"))))))))
 
 ;; ---- authorize -----------------------------------------------------------------------------
