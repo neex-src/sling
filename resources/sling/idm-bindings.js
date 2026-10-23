@@ -50,7 +50,8 @@
     bindings: bindings,
     // what the trigger or endpoint left behind: its value and the (possibly changed) object
     result: function (value) {
-      return JSON.stringify({ value: value === undefined ? null : value, object: globalThis.object === undefined ? null : globalThis.object, logs: logs });
+      var g = function (k) { return globalThis[k] === undefined ? null : globalThis[k]; };
+      return JSON.stringify({ value: value === undefined ? null : value, object: g("object"), target: g("target"), logs: logs });
     }
   };
 })

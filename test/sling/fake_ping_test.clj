@@ -395,3 +395,43 @@
       (is (= "3f9a2b1c-0000-4000-8000-000000000001" (:sub (:claims (jwt/decode (get-in r [:body :access_token])))))))
     (is (re-find #"no trusted JWT issuer" (get-in (grant (jwt {:iss "https://evil.test"})) [:body :error_description])))
     (is (= "invalid_scope" (get-in (grant (jwt {:scope ["profile"]})) [:body :error])) "scope not consented in the assertion")))
+
+(deftest sync-to-our-database
+  (let [bearer {"Authorization" (str "Bearer " (get-in (client-token "fr:idm:*") [:body :access_token]))}
+        accounts "/openidm/system/HRDB/__ACCOUNT__"
+        in-db (fn [] (mapv #(select-keys % [:__NAME__ :fullname :organization :email])
+                           (get-in (call "GET" accounts :query {"_queryFilter" "true" "_sortKeys" "__NAME__"} :headers bearer) [:body :result])))
+        user (fn [name] (idm/find-by (:idm *srv*) "alpha_user" :userName name))]
+    (testing "a new active user reaches the HR system: properties, transform, the mapping's onCreate"
+      (call "POST" "/openidm/managed/alpha_user" :query {"_action" "create"} :headers bearer
+            :body {:userName "mara" :givenName "Mara" :sn "Dobre" :mail "mara@members.test" :accountStatus "active"})
+      (is (= [{:__NAME__ "mara" :fullname "Mara Dobre" :organization "WEB" :email "mara@members.test"}] (in-db))))
+    (testing "a change follows (CONFIRMED -> UPDATE)"
+      (call "PATCH" (str "/openidm/managed/alpha_user/" (:_id (user "mara"))) :headers bearer
+            :body [{:operation "replace" :field "/sn" :value "Popa"}])
+      (is (= "Mara Popa" (:fullname (first (in-db))))))
+    (testing "deactivated: no longer a valid source (UNQUALIFIED -> DELETE)"
+      (call "PATCH" (str "/openidm/managed/alpha_user/" (:_id (user "mara"))) :headers bearer
+            :body [{:operation "replace" :field "/accountStatus" :value "inactive"}])
+      (is (= [] (in-db))))
+    (testing "a row that appears in the HR system becomes a user, linked both ways, no duplicate pushed back"
+      (call "POST" accounts :query {"_action" "create"} :headers bearer
+            :body {:__NAME__ "ilie" :firstname "Ilie" :lastname "Stan" :email "ilie@hr.test"})
+      (is (= {:userName "ilie" :givenName "Ilie" :mail "ilie@hr.test" :accountStatus "active"}
+             (select-keys (user "ilie") [:userName :givenName :mail :accountStatus])))
+      (is (= ["ilie"] (mapv :__NAME__ (in-db)))))
+    (testing "recon pushes the users that were there before"
+      (let [r (call "POST" "/openidm/recon" :query {"_action" "recon" "mapping" "alphaUser_systemHrdbAccount"} :headers bearer)]
+        (is (= 200 (:status r)))
+        (is (= #{"ana" "dan" "ilie"} (set (map :__NAME__ (in-db)))))
+        (is (= ["CREATE" "CREATE" "UPDATE"] (sort (keep :action (get-in r [:body :results])))) "mara is inactive: nothing to do")))
+    (testing "deleting the user deletes the row (SOURCE_MISSING -> DELETE)"
+      (call "DELETE" (str "/openidm/managed/alpha_user/" (:_id (user "dan"))) :headers bearer)
+      (is (= #{"ana" "ilie"} (set (map :__NAME__ (in-db))))))
+    (testing "the ESV behind enableSync switches the mapping off"
+      (swap! (:tenant *srv*) assoc-in [:services :esv "esv.hrdb.sync"] "false")
+      (call "POST" "/openidm/managed/alpha_user" :query {"_action" "create"} :headers bearer
+            :body {:userName "off" :accountStatus "active"})
+      (is (not (contains? (set (map :__NAME__ (in-db))) "off"))))
+    (testing "GET /sling/sync shows what happened"
+      (is (seq (get-in (call "GET" "/sling/sync") [:body :result]))))))

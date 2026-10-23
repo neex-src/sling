@@ -170,6 +170,9 @@
      [#"^/am/XUI/?$" :am :login-page]
      [#"^/openidm/managed/([^/]+)(?:/([^/]+))?$" :idm :idm]
      [#"^/openidm/endpoint/([^/]+)(?:/(.+))?$" :idm :endpoint]
+     [#"^/openidm/system/([^/]+)/([^/]+)(?:/([^/]+))?$" :idm :system]
+     [#"^/openidm/recon$" :idm :recon]
+     [#"^/sling/sync$" :am :sync-log]
      [#"^/sling/outbox$" :am :outbox]
      [#"^/environment/(variables|secrets)(?:/([^/]+))?$" :esv :env]]))
 
@@ -205,6 +208,15 @@
             :endpoint (if (allowed? srv req "fr:idm:*")
                         (openidm/handle-endpoint (:openidm srv) (idm-context srv req realm) req (nth m 1) (nth m 2))
                         (deny srv req))
+            :system (if (allowed? srv req "fr:idm:*")
+                      (openidm/handle-managed (:openidm srv) (idm-context srv req realm) req
+                                              (str "system/" (nth m 1) "/" (nth m 2)) (nth m 3))
+                      (deny srv req))
+            :recon (if (allowed? srv req "fr:idm:*")
+                     (try (web/json 200 (openidm/recon (:openidm srv) (idm-context srv req realm) (web/param req "mapping")))
+                          (catch clojure.lang.ExceptionInfo e (web/error (or (:code (ex-data e)) 400) (ex-message e))))
+                     (deny srv req))
+            :sync-log (web/json 200 {:result @(:sync-log (:openidm srv)) :links @(:links (:openidm srv))})
             :outbox (if (= "DELETE" (:method req))
                       (do (reset! (get-in @(:tenant srv) [:services :outbox]) []) (web/json 200 {:result []}))
                       (web/json 200 {:result @(get-in @(:tenant srv) [:services :outbox])}))
@@ -287,7 +299,7 @@
         t (cond-> t services (update :services merge (edn/read-string (slurp services))))
         idm (seed-identities (:services t) realm)
         tenant (atom t)
-        env {:tenant tenant :idm idm}
+        env {:tenant tenant :idm idm :links (atom {}) :sync-log (atom [])}
         internal {:security {:authenticationId "sling" :authorization {:id "sling" :component "internal/user"
                                                                              :roles ["internal/role/openidm-admin"]}}}
         _ (swap! tenant update :services assoc :idm idm :realm realm :outbox (atom []) :public-url (:public-url opts)

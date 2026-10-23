@@ -1,0 +1,46 @@
+{
+  "properties" : [ {
+    "source" : "__NAME__",
+    "target" : "userName"
+  }, {
+    "source" : "firstname",
+    "target" : "givenName"
+  }, {
+    "source" : "lastname",
+    "target" : "sn"
+  }, {
+    "source" : "email",
+    "target" : "mail"
+  }, {
+    "target" : "accountStatus",
+    "default" : "active"
+  } ],
+  "correlationQuery" : [ {
+    "linkQualifier" : "default",
+    "type" : "text/javascript",
+    "source" : "({ _queryFilter: \"userName eq \\\"\" + source.__NAME__ + \"\\\"\" });"
+  } ],
+  "displayName" : "HR database to users",
+  "consentRequired" : false,
+  "name" : "systemHrdbAccount_alphaUser",
+  "policies" : [ {
+    "situation" : "ABSENT",
+    "action" : "CREATE"
+  }, {
+    "situation" : "FOUND",
+    "action" : "LINK"
+  }, {
+    "situation" : "CONFIRMED",
+    "action" : "UPDATE"
+  }, {
+    "situation" : "SOURCE_MISSING",
+    "action" : {
+      "type" : "text/javascript",
+      "globals" : { },
+      "source" : "situation === \"SOURCE_MISSING\" ? \"UNLINK\" : \"IGNORE\";"
+    }
+  } ],
+  "source" : "system/HRDB/__ACCOUNT__",
+  "_id" : "sync/systemHrdbAccount_alphaUser",
+  "target" : "managed/alpha_user"
+}

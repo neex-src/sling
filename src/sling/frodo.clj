@@ -10,6 +10,7 @@
     global/idm/managed/*.json   managed object schemas and their scripts (onCreate, postUpdate ...)
     global/idm/endpoint/*.json  custom endpoints (inline source, or a file:// neighbour)
     global/emailTemplate/*.json email templates (Email Suspend, external/email sendTemplate)
+    global/sync/*.sync.json     sync mappings (also global/mapping/*.mapping.json)
 
   Also `coverage`: for each journey, which node types and scripts sling can run, which it
   cannot and why, so the cost of a real tenant can be read off its export before writing code."
@@ -90,6 +91,13 @@
      :trusted-issuers (into {} (for [f (files-ending root ".trustedJwtIssuer.json") :when (keep? f)
                                      [id t] (:trustedJwtIssuer (read-json f))]
                                  [(clojure.core/name id) t]))
+     :mappings (let [named (into {} (for [f (concat (files-ending root ".sync.json") (files-ending root ".mapping.json"))
+                                          :when (keep? f)
+                                          :let [m (read-json f)
+                                                m (if (:idm m) (first (vals (:idm m))) m)]
+                                          :when (and (:name m) (:source m))]
+                                      [(:name m) m]))]
+                 (vec (vals named)))
      :email-templates (into {} (for [f (files-ending root ".emailTemplate.json") :when (keep? f)
                                      [id t] (:emailTemplate (read-json f))]
                                  [(clojure.core/name id) t]))

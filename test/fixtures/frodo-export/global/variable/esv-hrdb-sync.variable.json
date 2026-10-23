@@ -1,0 +1,10 @@
+{
+  "variable" : {
+    "esv-hrdb-sync" : {
+      "_id" : "esv-hrdb-sync",
+      "description" : "Sync users to the HR database",
+      "expressionType" : "bool",
+      "value" : "true"
+    }
+  }
+}
