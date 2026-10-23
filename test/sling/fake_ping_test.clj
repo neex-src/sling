@@ -464,5 +464,57 @@
         (is (= "FROM CONFIG" (get-in (call "POST" "/openidm/managed/alpha_user" :query {"_action" "create"} :headers bearer
                                            :body {:userName "cfg"}) [:body :sn])))))
     (testing "the listing Frodo exports from"
-      (is (= #{"endpoint/orderSummary" "endpoint/hello" "managed" "sync"}
+      (is (= #{"endpoint/orderSummary" "endpoint/hello" "managed" "sync" "provisioner.openicf/HRDB"}
              (set (map :_id (get-in (call "GET" "/openidm/config" :query {"_queryFilter" "true"} :headers bearer) [:body :result]))))))))
+
+(defn- hrdb-up? []
+  (try (with-open [_ (java.net.Socket. "127.0.0.1" 15432)] true) (catch Exception _ false)))
+
+(deftest sync-through-the-real-connector
+  (if-not (hrdb-up?)
+    (println "SKIPPED sync-through-the-real-connector: no HR database on 127.0.0.1:15432 (bb hrdb:up)")
+    (let [bearer {"Authorization" "Bearer local-dev"}
+          rows #(with-open [c (java.sql.DriverManager/getConnection "jdbc:postgresql://127.0.0.1:15432/hr" "hr" "hr")]
+                  (let [rs (.executeQuery (.createStatement c) "SELECT username, full_name, department FROM employees ORDER BY id")]
+                    (loop [acc []] (if (.next rs) (recur (conj acc [(.getString rs 1) (.getString rs 2) (.getString rs 3)])) acc))))
+          clean! #(with-open [c (java.sql.DriverManager/getConnection "jdbc:postgresql://127.0.0.1:15432/hr" "hr" "hr")]
+                    (.executeUpdate (.createStatement c) "DELETE FROM employees WHERE username <> 'greta'"))]
+      (clean!)
+      ;; on a laptop: the same provisioner as the tenant's, pointed at the local scripts and database
+      (swap! (:tenant *srv*) assoc-in [:services :connectors "HRDB"]
+             {:scriptRoots ["test/fixtures/connectors/hrdb"] :url "jdbc:postgresql://127.0.0.1:15432/hr"
+              :driverClassName "org.postgresql.Driver" :username "hr" :password "hr" :validationQuery "SELECT 1"})
+      (try
+        (testing "a new user goes through the mapping, the Groovy CreateScript, into Postgres"
+          (call "POST" "/openidm/managed/alpha_user" :query {"_action" "create"} :headers bearer
+                :body {:userName "petra" :givenName "Petra" :sn "Vlad" :mail "petra@members.test" :accountStatus "active"})
+          (is (= [["greta" "Greta Nagy" "FIN"] ["petra" "Petra Vlad" "WEB"]] (rows))))
+        (testing "a change: SearchScript for the link, UpdateScript for the row"
+          (call "PATCH" (str "/openidm/managed/alpha_user/" (:_id (idm/find-by (:idm *srv*) "alpha_user" :userName "petra")))
+                :headers bearer :body [{:operation "replace" :field "/sn" :value "Lungu"}])
+          (is (= ["petra" "Petra Lungu" "WEB"] (second (rows)))))
+        (testing "the rows read back over /openidm/system with a query filter (SearchScript's WHERE)"
+          (is (= ["greta"] (mapv :__NAME__ (get-in (call "GET" "/openidm/system/HRDB/__ACCOUNT__" :headers bearer
+                                                         :query {"_queryFilter" "email sw \"greta\""}) [:body :result])))))
+        (testing "recon creates users from rows that were there first (reverse mapping)"
+          (call "POST" "/openidm/recon" :query {"_action" "recon" "mapping" "systemHrdbAccount_alphaUser"} :headers bearer)
+          (is (= "greta@hr.test" (:mail (idm/find-by (:idm *srv*) "alpha_user" :userName "greta")))))
+        (testing "deleting the user: DeleteScript removes the row"
+          (call "DELETE" (str "/openidm/managed/alpha_user/" (:_id (idm/find-by (:idm *srv*) "alpha_user" :userName "petra"))) :headers bearer)
+          (is (= [["greta" "Greta Nagy" "FIN"]] (rows))))
+        (finally (clean!))))))
+
+(deftest sms-otp
+  (let [t @(:tenant *srv*)
+        tree (get-in t [:trees "EmailOtp"])
+        sender (some (fn [[id n]] (when (= "OneTimePasswordSmtpSenderNode" (:nodeType n)) (name id))) (:nodes tree))]
+    ;; the same journey with the SMS sender in the mail sender's place
+    (swap! (:tenant *srv*) assoc-in [:trees "SmsOtp"]
+           (assoc-in tree [:nodes (keyword sender) :nodeType] "OneTimePasswordSmsSenderNode"))
+    (swap! (:tenant *srv*) assoc-in [:nodes sender :smsContent] {:en "Code: {{OTP}}"})
+    (idm/patch! (:idm *srv*) "alpha_user" "3f9a2b1c-0000-4000-8000-000000000002"
+                [{:operation "replace" :field "/telephoneNumber" :value "+40700000001"}])
+    (let [r (drive (svc "SmsOtp") (fn [cbs] (if (= 2 (count cbs)) ["dan" "Dan-pw-123"] [(:otp (last (outbox)))])))]
+      (is (= 200 (:status r)))
+      (is (= {:kind "sms" :to "+40700000001"} (select-keys (last (outbox)) [:kind :to])))
+      (is (re-find #"^Code: \d{6}$" (:body (last (outbox))))))))

@@ -302,7 +302,7 @@
         t (cond-> t services (update :services merge (edn/read-string (slurp services))))
         idm (seed-identities (:services t) realm)
         tenant (atom t)
-        env {:tenant tenant :idm idm :links (atom {}) :sync-log (atom [])}
+        env {:tenant tenant :idm idm :links (atom {}) :sync-log (atom []) :connectors (atom {})}
         internal {:security {:authenticationId "sling" :authorization {:id "sling" :component "internal/user"
                                                                              :roles ["internal/role/openidm-admin"]}}}
         _ (swap! tenant update :services assoc :idm idm :realm realm :outbox (atom []) :public-url (:public-url opts)

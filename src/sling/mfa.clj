@@ -110,19 +110,21 @@
 
 (defn- localized [m] (if (map? m) (or (:en m) (first (vals m))) m))
 
-(defn- send-otp [kind addr-attr default-attr {:keys [tenant session config]}]
+(defn- send-otp [kind addr-attrs default-attr {:keys [tenant session config]}]
   (let [u (current-user tenant session)
-        to (or (get u (keyword (or (get config addr-attr) default-attr))) (get-in session [:shared "objectAttributes" (keyword default-attr)]))
+        attr (keyword (or (some #(get config %) addr-attrs) default-attr))
+        to (or (get u attr) (get-in session [:shared "objectAttributes" attr]))
         code (get-in session [:transient "oneTimePassword"])]
     (if (and to code)
       (do (outside/send-mail! (:services tenant)
-                              {:kind kind :to to :subject (localized (:emailSubject config)) :otp code
-                               :body (str/replace (or (localized (:emailContent config)) "Your one-time password: {{OTP}}") "{{OTP}}" code)})
+                              {:kind kind :to to :subject (localized (or (:smsSubject config) (:emailSubject config))) :otp code
+                               :body (str/replace (or (localized (or (:smsContent config) (:emailContent config))) "Your one-time password: {{OTP}}") "{{OTP}}" code)})
           {:outcome "outcome"})
       {:error (str "no " (if (= kind "sms") "phone number" "mail address") " or no generated password to send")})))
 
-(defmethod engine/run-node "OneTimePasswordSmtpSenderNode" [ctx] (send-otp "email" :emailAttribute "mail" ctx))
-(defmethod engine/run-node "OneTimePasswordSmsSenderNode" [ctx] (send-otp "sms" :mobilePhoneAttributeName "telephoneNumber" ctx))
+(defmethod engine/run-node "OneTimePasswordSmtpSenderNode" [ctx] (send-otp "email" [:emailAttribute] "mail" ctx))
+(defmethod engine/run-node "OneTimePasswordSmsSenderNode" [ctx] ;; the export key for the phone attribute is not in the docs; these are the likely spellings
+  (send-otp "sms" [:mobilePhoneAttributeName :mobilePhoneNumberAttributeName :phoneNumberAttribute] "telephoneNumber" ctx))
 
 (defmethod engine/run-node "OneTimePasswordCollectorDecisionNode" [{:keys [config session inputs]}]
   (if (seq inputs)

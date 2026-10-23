@@ -60,45 +60,93 @@
 
 (declare sync-change!)
 
+;; ---- where objects live -------------------------------------------------------------------
+;; Managed objects, and system objects of a connector nobody configured, live in the in-memory
+;; store. A system/<conn>/<type> whose connector is configured (services :connectors <conn>) goes
+;; through sling.icf to the real connector scripts and database.
+
+(defn- connector [env conn]
+  (when-let [local (get-in @(:tenant env) [:services :connectors conn])]
+    (or (get @(:connectors env) conn)
+        (let [c ((requiring-resolve 'sling.icf/connect)
+                 (get-in @(:tenant env) [:idm-config (str "provisioner.openicf/" conn)]) local)]
+          (swap! (:connectors env) assoc conn c)
+          c))))
+
+(defn- backend [env type]
+  (when-let [[_ conn ot] (re-matches #"system/([^/]+)/(.+)" type)]
+    (when-let [c (connector env conn)] [c ot])))
+
+(defn- icf [f & args] (apply (requiring-resolve (symbol "sling.icf" (name f))) args))
+
+(defn- s-read [env type id]
+  (if-let [[c ot] (backend env type)] (icf :read-obj c ot id) (idm/read-obj (:idm env) type id)))
+
+(defn- s-create! [env type obj]
+  (if-let [[c ot] (backend env type)] (icf :create! c ot (dissoc obj :_id)) (idm/create! (:idm env) type obj)))
+
+(defn- s-replace! [env type id obj]
+  (if-let [[c ot] (backend env type)] (icf :update! c ot id obj) (idm/replace! (:idm env) type id obj)))
+
+(defn- s-delete! [env type id]
+  (if-let [[c ot] (backend env type)] (icf :delete! c ot id) (idm/delete! (:idm env) type id)))
+
+(defn- s-query
+  "A CREST query. A connector answers the filter; paging, sorting and _fields are applied here."
+  [env type params]
+  (if-let [[c ot] (backend env type)]
+    (let [found (icf :search c ot (idm/parse-filter (or (get params "_queryFilter") "true")))
+          tmp (atom {type (into {} (map (juxt :_id identity) found))})]
+      (idm/query tmp type params))
+    (idm/query (:idm env) type params)))
+
+(defn- s-all [env type]
+  (if (backend env type)
+    (map (juxt :_id identity) (:result (s-query env type {"_queryFilter" "true"})))
+    (get @(:idm env) type)))
+
+
+
 (defn create [env ctx depth type id content]
-  (let [store (:idm env)
-        id (or id (:_id content) (str (UUID/randomUUID)))
-        _ (when (idm/read-obj store type id) (fail 412 (str "managed/" type "/" id " already exists")))
+  (let [given (or id (:_id content))
+        id (or given (str (UUID/randomUUID)))
+        _ (when (and given (s-read env type given)) (fail 412 (str "managed/" type "/" given " already exists")))
         obj (assoc content :_id id)
         obj (or (:object (trigger env ctx depth type "onCreate" {:object obj :newObject obj})) obj)
         _ (trigger env ctx depth type "onValidate" {:object obj :value obj})
-        saved (idm/create! store type (assoc obj :_id id))]
+        saved (s-create! env type (assoc obj :_id id))
+        id (:_id saved)]
     (trigger env ctx depth type "postCreate" {:object saved :newObject saved})
     (sync-change! env ctx depth type id saved)
     saved))
 
 (defn read-obj [env ctx depth type id]
-  (when-let [o (idm/read-obj (:idm env) type id)]
+  (when-let [o (s-read env type id)]
     (or (:object (trigger env ctx depth type "onRead" {:object o})) o)))
 
 (defn- write [env ctx depth type id old new]
   (let [obj (or (:object (trigger env ctx depth type "onUpdate" {:object new :oldObject old :newObject new})) new)
         _ (trigger env ctx depth type "onValidate" {:object obj :value obj})
-        saved (idm/replace! (:idm env) type id obj)]
+        saved (s-replace! env type id obj)]
     (trigger env ctx depth type "postUpdate" {:object saved :oldObject old :newObject saved})
     (sync-change! env ctx depth type id saved)
     saved))
 
 (defn update-obj [env ctx depth type id rev content]
-  (if-let [old (idm/read-obj (:idm env) type id)]
+  (if-let [old (s-read env type id)]
     (do (when (and rev (not= rev "*") (not= rev (:_rev old))) (fail 412 "revision does not match"))
         (write env ctx depth type id old (assoc content :_id id)))
     (create env ctx depth type id content)))
 
 (defn patch-obj [env ctx depth type id rev ops]
-  (let [old (or (idm/read-obj (:idm env) type id) (fail 404 (str "managed/" type "/" id " not found")))]
+  (let [old (or (s-read env type id) (fail 404 (str "managed/" type "/" id " not found")))]
     (when (and rev (not= rev "*") (not= rev (:_rev old))) (fail 412 "revision does not match"))
     (write env ctx depth type id old (idm/apply-ops old ops))))
 
 (defn delete-obj [env ctx depth type id]
-  (let [old (or (idm/read-obj (:idm env) type id) (fail 404 (str "managed/" type "/" id " not found")))]
+  (let [old (or (s-read env type id) (fail 404 (str "managed/" type "/" id " not found")))]
     (trigger env ctx depth type "onDelete" {:object old})
-    (idm/delete! (:idm env) type id)
+    (s-delete! env type id)
     (trigger env ctx depth type "postDelete" {:oldObject old})
     (sync-change! env ctx depth type id nil)
     old))
@@ -169,10 +217,10 @@
     (cond
       (:expressionTree q)
       (let [t (build-target env ctx depth mapping source)]
-        (:result (idm/query (:idm env) (store-type (:target mapping)) {"_queryFilter" (tree->filter (:expressionTree q) t)})))
+        (:result (s-query env (store-type (:target mapping)) {"_queryFilter" (tree->filter (:expressionTree q) t)})))
       (:source q)
       (let [params (mapping-script env ctx depth mapping "correlationQuery" q {:source source :linkQualifier "default"})]
-        (:result (idm/query (:idm env) (store-type (:target mapping)) (update-vals (update-keys params name) str)))))))
+        (:result (s-query env (store-type (:target mapping)) (update-vals (update-keys params name) str)))))))
 
 (declare create update-obj delete-obj)
 
@@ -183,7 +231,7 @@
         lname (:name mapping)
         ttype (store-type (:target mapping))
         target-id (get-in @links [lname source-id])
-        target (some->> target-id (idm/read-obj (:idm env) ttype))
+        target (some->> target-id (s-read env ttype))
         valid? (or (nil? source) (nil? (:validSource mapping))
                    (mapping-script env ctx depth mapping "validSource" (:validSource mapping) {:source source :linkQualifier "default"}))
         situation (cond
@@ -208,7 +256,7 @@
                  (link! (:_id saved))
                  (assoc result :targetId (:_id saved)))
       ("UPDATE" "LINK") (let [tid (or target-id (:_id (first (correlate env ctx depth mapping source))))
-                              old (idm/read-obj (:idm env) ttype tid)
+                              old (s-read env ttype tid)
                               t (merge old (build-target env ctx depth mapping source))
                               t (if-let [s (and (= action "UPDATE") (:onUpdate mapping))]
                                   (or (:target (run-script env ctx depth s (str "mapping " lname " onUpdate")
@@ -244,7 +292,7 @@
   (let [m (or (first (filter #(= mapping-name (:name %)) (:mappings @(:tenant env)))) (fail 404 (str "no mapping " mapping-name)))
         stype (store-type (:source m))
         before (count @(:sync-log env))]
-    (doseq [[id o] (get @(:idm env) stype)]
+    (doseq [[id o] (s-all env stype)]
       (sync-change! env ctx 0 stype id o))
     {:_id (str (random-uuid)) :mapping mapping-name :state "SUCCESS"
      :results (vec (filter #(= mapping-name (:mapping %)) (drop before @(:sync-log env))))}))
@@ -333,7 +381,7 @@
                                                     (when-let [q (:_queryFilter params)] {:queryFilter q})
                                                     (when-let [q (:_queryId params)] {:queryId q})))
                 (do (managed!)
-                    (idm/query (:idm env) type (cond-> (update-vals (update-keys (or params {}) name) str)
+                    (s-query env type (cond-> (update-vals (update-keys (or params {}) name) str)
                                                  (seq fields) (assoc "_fields" (str/join "," fields))))))
       "action" (action env ctx depth args)
       "property" (let [k (:key args) s (:services @(:tenant env))] (or (get-in s [:esv k]) (get-in s [:secrets k])))
@@ -383,11 +431,11 @@
         out (fn [status o] (web/json status (idm/public-view o fields)))]
     (try
       (case [method (some? id)]
-        ["query" false] (web/json 200 (idm/query (:idm env) type (update-vals (:query req) first)))
+        ["query" false] (web/json 200 (s-query env type (update-vals (:query req) first)))
         ["read" false] (web/error 400 "query requests need _queryFilter (use _queryFilter=true for all)")
         ["create" false] (out 201 (create env ctx 0 type nil @body))
         ["read" true] (if-let [o (read-obj env ctx 0 type id)] (out 200 o) (web/error 404 (str "managed/" type "/" id " not found")))
-        ["update" true] (let [old (idm/read-obj (:idm env) type id)]
+        ["update" true] (let [old (s-read env type id)]
                           (if (and old (= "*" (web/header req "if-none-match")))
                             (web/error 412 "object already exists")
                             (out (if old 200 201) (update-obj env ctx 0 type id (web/header req "if-match") @body))))

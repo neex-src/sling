@@ -1,6 +1,9 @@
 {:tasks
  {serve     {:doc "Start the fake tenant: bb serve [port] [tenant-dir] | --frodo <export> --services <edn> --bind 0.0.0.0 --public-url <url> --modules oauth,idm,am,esv,journeys --token-format jwt|opaque"
-             :task (apply shell "clojure" "-M" "-m" "sling.server" *command-line-args*)}
+             :task (apply shell "clojure" "-M:icf" "-m" "sling.server" *command-line-args*)}
+  hrdb:up   {:doc "Start the HR database (Postgres in podman) the HRDB connector fixture writes to"
+             :task (shell "bb" "bb/hrdb.bb" "up")}
+  hrdb:down {:doc "Stop it" :task (shell "bb" "bb/hrdb.bb" "down")}
   coverage  {:doc "What of a Frodo export runs here, and what blocks the rest: bb coverage <export-dir> [realm]"
              :task (apply shell "clojure" "-M" "-m" "sling.frodo" *command-line-args*)}
   deploy    {:doc "PUT tenant/ to a tenant API: bb deploy --base URL --token T [--dry-run]"
