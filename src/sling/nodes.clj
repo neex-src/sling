@@ -43,15 +43,15 @@
 
 ;; ---- page ----------------------------------------------------------------------------------
 
-(defmethod engine/run-node "PageNode" [{:keys [config tenant session inputs]}]
+(defmethod engine/run-node "PageNode" [{:keys [config tenant session all-inputs]}]
   (let [children (:nodes config)
-        by-child (group-by :child inputs)]
+        by-child (group-by :child all-inputs)]
     (loop [i 0 s session cbs [] out {:shared {} :transient {}} outcome nil]
       (if (= i (count children))
         (if (seq cbs) (assoc out :callbacks cbs) (assoc out :outcome (or outcome "outcome")))
         (let [{:keys [_id nodeType]} (nth children i)
               r (engine/run-node {:type nodeType :config (get-in tenant [:nodes _id]) :tenant tenant :session s
-                                  :inputs (vec (get by-child i))})
+                                  :inputs (vec (remove :output (get by-child i))) :all-inputs (vec (get by-child i))})
               s' (-> s (update :shared merge (:shared r)) (update :transient merge (:transient r)))
               out' (-> out (update :shared merge (:shared r)) (update :transient merge (:transient r))
                        (update :props merge (:props r)))]

@@ -49,3 +49,34 @@
     (let [r (run "this is not javascript" {})]
       (is (nil? (:outcome r)))
       (is (re-find #"script error" (:error r))))))
+
+(def legacy-src
+  "var fr = JavaImporter(org.forgerock.openam.auth.node.api.Action, javax.security.auth.callback.NameCallback,
+                         org.forgerock.http.protocol.Request);
+   if (callbacks.isEmpty()) {
+     action = fr.Action.send(new fr.NameCallback('Member number')).build();
+   } else {
+     var n = callbacks.get(0).getName();
+     var req = new fr.Request();
+     req.setUri('https://risk.example.test/score?user=' + sharedState.get('username'));
+     req.setMethod('GET');
+     var score = JSON.parse(httpClient.send(req).get().getEntity().getString()).score;
+     sharedState.put('member', n);
+     logger.message('tier ' + nodeState.get('tier').asString());
+     outcome = score > 80 ? 'false' : 'true';
+   }")
+
+(deftest legacy-scripts
+  (testing "first visit: a Java callback built through JavaImporter goes out as the wire callback"
+    (is (= [{:type "NameCallback" :args {:prompt "Member number" :default ""}}] (:callbacks (script/run-script legacy-src {} services {:legacy true})))))
+  (testing "resume: callbacks, sharedState, Request/Response, nodeState JsonValue and the outcome global"
+    (let [r (script/run-script legacy-src {:shared {"username" "bob" "tier" "gold"} :callbacks [{:type "NameCallback" :value "42"}]}
+                               services {:legacy true})]
+      (is (= "true" (:outcome r)))
+      (is (= {"member" "42"} (:shared r)))
+      (is (= "tier gold" (-> r :logs first :message))))
+    (is (= "false" (:outcome (script/run-script legacy-src {:shared {"username" "mallory" "tier" "basic"} :callbacks [{:type "NameCallback" :value "1"}]}
+                                                services {:legacy true})))))
+  (testing "a Java class nobody modelled fails by name"
+    (is (re-find #"java.util.concurrent.ConcurrentHashMap is not modelled"
+                 (:error (script/run-script "var m = new java.util.concurrent.ConcurrentHashMap(); outcome = 'true';" {} services {:legacy true}))))))

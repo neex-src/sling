@@ -99,9 +99,10 @@
           bindings (sort (distinct (map second (re-seq #"\b(nodeState|callbacksBuilder|callbacks|action|httpClient|openidm|idRepository|systemEnv|requestHeaders|requestParameters|requestCookies|existingSession|logger|secrets|utils|jwtAssertion|jwtValidator|resumedFromSuspend|cookieName|realm|scriptName|require)\b" source))))]
       {:script (:name meta) :id id :language (:language meta) :evaluatorVersion (:evaluatorVersion meta)
        :bindings (vec bindings)
-       :runs? (and (= "JAVASCRIPT" (:language meta)) (not= "1.0" (:evaluatorVersion meta)) (empty? legacy))
+       :legacy? (= "1.0" (:evaluatorVersion meta))
+       :java-classes (vec (sort (distinct (map second (re-seq #"\b((?:org|javax|com|java)\.[\w.]+\.[A-Z]\w*)" source)))))
+       :runs? (= "JAVASCRIPT" (:language meta))
        :why (vec (concat (when (not= "JAVASCRIPT" (:language meta)) [(str "language " (:language meta))])
-                         (when (= "1.0" (:evaluatorVersion meta)) ["legacy (1.0) script engine"])
                          legacy))})
     {:id id :runs? false :why ["script not in the export"]}))
 

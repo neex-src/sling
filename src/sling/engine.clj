@@ -45,11 +45,14 @@
       acc)))
 
 (defn- answers
-  "Pair the client's answers with the callbacks we asked for, in order. Output-only ones carry none."
+  "Pair the client's answers with the callbacks we asked for, in order. Output-only ones carry no
+  value and are marked :output; nodes see only the others, scripts see all (a script that only
+  showed text still knows it is being resumed)."
   [pending client]
   (vec (for [[spec cb] (map vector pending client)
-             :when (not (or (= "TextOutputCallback" (:type spec)) (get-in spec [:args :output-only])))]
-         (cond-> {:type (:type spec) :value (some-> cb :input first :value)}
+             :let [output? (or (= "TextOutputCallback" (:type spec)) (get-in spec [:args :output-only]))]]
+         (cond-> {:type (:type spec) :value (when-not output? (some-> cb :input first :value))}
+           output? (assoc :output true)
            (= "HiddenValueCallback" (:type spec)) (assoc :id (get-in spec [:args :id]))
            (:child spec) (assoc :child (:child spec))))))
 
@@ -82,12 +85,15 @@
                 (get-in tenant [:services :users user]))]
     {:outcome (if (and known (some? pw) (= pw (:password known))) "true" "false")}))
 
-(defmethod run-node "ScriptedDecisionNode" [{:keys [tenant session config inputs]}]
-  (if-let [{:keys [source]} (get-in tenant [:scripts (:script config)])]
-    (let [r (script/run-script source
-                               {:shared (:shared session) :transient (:transient session)
-                                :request (:request session) :callbacks inputs}
-                               (:services tenant))
+(defmethod run-node "ScriptedDecisionNode" [{:keys [tenant session config all-inputs]}]
+  (if-let [{:keys [source meta]} (get-in tenant [:scripts (:script config)])]
+    (let [r (if (= "GROOVY" (:language meta))
+              {:error (str "script " (pr-str (:name meta)) " is Groovy, which sling does not run")}
+              (script/run-script source
+                                 {:shared (:shared session) :transient (:transient session)
+                                  :request (:request session) :callbacks (or all-inputs [])}
+                                 (:services tenant)
+                                 {:legacy (= "1.0" (:evaluatorVersion meta))}))
           allowed (set (or (:outcomes config) ["true" "false"]))
           a (:action r)]
       (cond
@@ -147,7 +153,8 @@
                            (assoc :journey (:tree cfg) :node (:entryNodeId inner)))
                        nil (inc steps))
                 (fail s (str "inner journey " (pr-str (:tree cfg)) " does not exist")))
-              (let [r (run-node {:type type :config cfg :tenant t :session s :inputs inputs})]
+              (let [r (run-node {:type type :config cfg :tenant t :session s
+                                  :inputs (vec (remove :output inputs)) :all-inputs inputs})]
                 (cond
                   (:error r) (fail (update s :trace (fnil conj []) {:journey (:journey s) :node name :error (:error r)})
                                    (str name ": " (:error r)))

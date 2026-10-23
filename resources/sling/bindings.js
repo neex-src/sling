@@ -13,6 +13,9 @@
     a.get = function (i) { return a[i]; };
     a.size = function () { return a.length; };
     a.contains = function (x) { return a.indexOf(x) !== -1; };
+    a.isEmpty = function () { return a.length === 0; };
+    a.toArray = function () { return a.slice(); };
+    a.iterator = function () { var i = 0; return { hasNext: function () { return i < a.length; }, next: function () { return a[i++]; } }; };
     return a;
   };
   var shared = input.shared, transient = input.transient;
@@ -131,6 +134,8 @@
       idRepository: idRepository, httpClient: httpClient, openidm: openidm, systemEnv: systemEnv,
       logger: logger, existingSession: existingSession, resumedFromSuspend: false
     },
-    result: function () { return JSON.stringify(out); }
+    result: function () { return JSON.stringify(out); },
+    // for the legacy (1.0) layer in legacy.js, which writes to the same state
+    internals: { out: out, call: call, list: list, input: input, want: want, builder: builder, response: response }
   };
 })

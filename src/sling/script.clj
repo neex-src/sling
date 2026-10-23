@@ -25,6 +25,7 @@
              (.build))))
 
 (def ^:private prelude (delay (slurp (io/resource "sling/bindings.js"))))
+(def ^:private legacy-prelude (delay (slurp (io/resource "sling/legacy.js"))))
 
 (defn- match? [m uri]
   (if (str/ends-with? m "*") (str/starts-with? uri (subs m 0 (dec (count m)))) (= m uri)))
@@ -91,35 +92,43 @@
   input: {:shared {} :transient {} :request {:headers {name [v]} :parameters {} :cookies {}}
           :callbacks [{:type \"NameCallback\" :value \"x\"}] :existing-session {}}
   Returns {:outcome s|nil :action {...} :callbacks [{:type :args}] :shared {} :transient {} :logs [] :error s|nil}.
-  :shared/:transient hold only what the script wrote."
-  [source input services]
-  (let [host (reify ProxyExecutable
-               (execute [_ args]
-                 (let [op (.asString ^Value (aget args 0))
-                       a (json/parse-string (.asString ^Value (aget args 1)) true)
-                       r (host-op services op a)]
-                   (when (some? r) (json/generate-string r)))))
-        in (json/generate-string
-            {:shared (or (:shared input) {}) :transient (or (:transient input) {})
-             :callbacks (or (:callbacks input) [])
-             :existingSession (or (:existing-session input) {})
-             :request (merge {:headers {} :parameters {} :cookies {}} (:request input))})]
-    (with-open [ctx (-> (Context/newBuilder (into-array String ["js"])) (.engine @engine) (.build))]
-      (try
-        (let [factory (.eval ctx (Source/create "js" ^String @prelude))
-              env (.execute factory (object-array [host in]))
-              globals (.getBindings ctx "js")
-              bindings (.getMember env "bindings")]
-          (doseq [k (.getMemberKeys bindings)]
-            (.putMember globals k (.getMember bindings k)))
-          (.eval ctx (Source/create "js" ^String source))
-          (let [r (json/parse-string (.asString (.invokeMember env "result" (object-array 0))) true)
-                a (:action r)]
-            (-> r
-                (update :shared update-keys name)
-                (update :transient update-keys name)
-                (cond-> a (update-in [:action :sessionProps] update-keys name))
-                (assoc :outcome (:outcome a) :error nil))))
-        (catch Exception e
-          {:outcome nil :callbacks [] :shared {} :transient {} :logs []
-           :error (str "script error: " (ex-message e))})))))
+  :shared/:transient hold only what the script wrote. With {:legacy true} the script runs with the
+  legacy (1.0) bindings of legacy.js layered on top."
+  ([source input services] (run-script source input services {}))
+  ([source input services {:keys [legacy]}]
+   (let [host (reify ProxyExecutable
+                (execute [_ args]
+                  (let [op (.asString ^Value (aget args 0))
+                        a (json/parse-string (.asString ^Value (aget args 1)) true)
+                        r (host-op services op a)]
+                    (when (some? r) (json/generate-string r)))))
+         in (json/generate-string
+             {:shared (or (:shared input) {}) :transient (or (:transient input) {})
+              :callbacks (or (:callbacks input) [])
+              :existingSession (or (:existing-session input) {})
+              :request (merge {:headers {} :parameters {} :cookies {}} (:request input))})]
+     (with-open [ctx (-> (Context/newBuilder (into-array String ["js"])) (.engine @engine) (.build))]
+       (try
+         (let [factory (.eval ctx (Source/create "js" ^String @prelude))
+               env (.execute factory (object-array [host in]))
+               globals (.getBindings ctx "js")
+               bindings (.getMember env "bindings")]
+           (doseq [k (.getMemberKeys bindings)]
+             (.putMember globals k (.getMember bindings k)))
+           (let [env (if legacy
+                       (let [l (.execute (.eval ctx (Source/create "js" ^String @legacy-prelude)) (object-array [env]))
+                             lb (.getMember l "bindings")]
+                         (doseq [k (.getMemberKeys lb)] (.putMember globals k (.getMember lb k)))
+                         l)
+                       env)]
+           (.eval ctx (Source/create "js" ^String source))
+           (let [r (json/parse-string (.asString (.invokeMember env "result" (object-array 0))) true)
+                 a (:action r)]
+             (-> r
+                 (update :shared update-keys name)
+                 (update :transient update-keys name)
+                 (cond-> a (update-in [:action :sessionProps] update-keys name))
+                 (assoc :outcome (:outcome a) :error nil)))))
+         (catch Exception e
+           {:outcome nil :callbacks [] :shared {} :transient {} :logs []
+            :error (str "script error: " (ex-message e))}))))))
