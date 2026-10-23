@@ -27,7 +27,7 @@
 (defn- in-realm?
   "Keep files of `realm` (and global ones) when the export has realm/ folders; keep all otherwise."
   [root realm f]
-  (let [p (.getPath (.relativize (.toPath (io/file root)) (.toPath f)))]
+  (let [p (str (.relativize (.toPath (io/file root)) (.toPath f)))]
     (or (not (.exists (io/file root "realm")))
         (str/starts-with? p (str "realm/root-" realm "/"))
         (str/starts-with? p "global/"))))

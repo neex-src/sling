@@ -220,7 +220,7 @@
                      :cookie-name "iPlanetDirectoryPro" :dev-token "local-dev"}
                     (dissoc o :port :dir :realm :services))
         t (if frodo (frodo/load-tenant frodo realm) (store/load-tenant dir realm))
-        t (cond-> t services (assoc :services (edn/read-string (slurp services))))
+        t (cond-> t services (update :services merge (edn/read-string (slurp services))))
         idm (seed-identities (:services t) realm)
         srv {:tenant (atom (update t :services assoc :idm idm :realm realm))
              :sessions (atom {}) :sso (atom {}) :tokens (atom {}) :codes (atom {}) :idm idm

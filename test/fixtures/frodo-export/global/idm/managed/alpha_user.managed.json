@@ -1,0 +1,19 @@
+{
+  "name": "alpha_user",
+  "schema": {
+    "properties": {
+      "userName": {"type": "string"},
+      "mail": {"type": "string"},
+      "givenName": {"type": "string"},
+      "sn": {"type": "string"},
+      "accountStatus": {"type": "string"},
+      "preferences": {
+        "type": "object",
+        "properties": {
+          "updates": {"type": "boolean", "description": "Send me news and updates"},
+          "marketing": {"type": "boolean", "description": "Send me special offers"}
+        }
+      }
+    }
+  }
+}
