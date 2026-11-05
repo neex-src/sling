@@ -9,7 +9,9 @@
  ;; (:nrepl) carries it too, since the tests run there.
  ;; :icf runs Groovy scripted connectors in-process (the open-source OpenICF framework, CDDL),
  ;; so system/<connector> can be the real connector scripts against a real database.
- {:icf {:extra-deps {org.openidentityplatform.openicf.connectors/groovy-connector {:mvn/version "2.0.4"}
+ {:build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.5"}}
+          :ns-default build}
+  :icf {:extra-deps {org.openidentityplatform.openicf.connectors/groovy-connector {:mvn/version "2.0.4"}
                        org.openidentityplatform.openicf.framework/connector-framework-internal {:mvn/version "2.0.4"}
                        org.openidentityplatform.openicf.framework/connector-test-common {:mvn/version "2.0.4"}
                        org.apache.tomcat/tomcat-jdbc {:mvn/version "7.0.53"}
