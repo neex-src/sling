@@ -1,0 +1,10 @@
+# sling as an image: the fake tenant, serving a Frodo export mounted at /tenant.
+# Nothing of any tenant is baked in. Build with `bb image` (it puts sling.jar next to this file).
+FROM docker.io/library/eclipse-temurin:21-jre
+COPY sling.jar /app/sling.jar
+EXPOSE 8090
+ENTRYPOINT ["java", "-cp", "/app/sling.jar", "clojure.main", "-m", "sling.server"]
+# The export at /tenant, the public URL the issuer is built from (what a service container,
+# Floci and the sandbox all use for fake Ping: *.localhost reaches the sandbox's loopback, the network
+# alias of the container reaches it from the other containers).
+CMD ["--frodo", "/tenant", "--bind", "0.0.0.0", "--port", "8090", "--public-url", "http://fakeping.localhost:8090"]
