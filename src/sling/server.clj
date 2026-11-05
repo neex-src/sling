@@ -10,7 +10,7 @@
     idm       /openidm/managed/<type>[/<id>], /openidm/endpoint/<name>, /openidm/system/<conn>/<type>,
               /openidm/recon, /openidm/config[/<id>]           see sling.openidm
     am        /am/json/serverinfo/*, .../sessions, /am/XUI/     see sling.am
-    dev       /sling/outbox (mail, SMS, OTPs, resume links), /sling/sync (what sync did)
+    dev       /sling/outbox[?to=&order=newest] (mail, SMS, OTPs, resume links), /sling/sync (what sync did)
     esv       /environment/variables, /environment/secrets      see sling.am
 
   Each group is a module; start with only the ones a consumer needs ({:modules #{:oauth}}) and a
@@ -181,6 +181,14 @@
 
 ;; ---- routing -------------------------------------------------------------------------------
 
+(defn- outbox-view
+  "The mail the outbox shows: all of it in the order it was sent, or with ?to=<address> only what that address got,
+  and ?order=newest turned around so $.result[0] is the last mail (a login's OTP)."
+  [msgs req]
+  (let [to (web/param req "to")
+        msgs (cond->> msgs to (filter #(= to (:to %))))]
+    (vec (if (= "newest" (web/param req "order")) (reverse msgs) msgs))))
+
 (def ^:private routes
   (let [pre "^/am/json(?:/realms/root/realms/([^/]+))?/"
         tre (str pre "realm-config/authentication/authenticationtrees/")]
@@ -252,7 +260,7 @@
             :sync-log (web/json 200 {:result @(:sync-log (:openidm srv)) :links @(:links (:openidm srv))})
             :outbox (if (= "DELETE" (:method req))
                       (do (reset! (get-in @(:tenant srv) [:services :outbox]) []) (web/json 200 {:result []}))
-                      (web/json 200 {:result @(get-in @(:tenant srv) [:services :outbox])}))
+                      (web/json 200 {:result (outbox-view @(get-in @(:tenant srv) [:services :outbox]) req)}))
             :env (if (allowed? srv req "fr:idc:esv:*")
                    (let [r (am/environment (:tenant srv) req (nth m 1) (nth m 2))]
                      (when (and (= "variables" (nth m 1)) (#{"PUT" "DELETE"} (:method req)) (= 200 (:status r)))

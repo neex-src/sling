@@ -2,7 +2,7 @@
   "The platform nodes a stock Advanced Identity Cloud journey is made of, modelled from the node
   reference, working on the IDM store the server shares (tenant :services :idm):
 
-    PageNode  ValidatedUsernameNode  ValidatedPasswordNode  IdentityStoreDecisionNode
+    ZeroPageLoginNode  PageNode  ValidatedUsernameNode  ValidatedPasswordNode  IdentityStoreDecisionNode
     AttributeCollectorNode  PatchObjectNode  CreateObjectNode  IdentifyExistingUserNode
     IncrementLoginCountNode  LoginCountDecisionNode  QueryFilterDecisionNode
     AttributePresentDecisionNode  AccountActiveDecisionNode  RetryLimitDecisionNode
@@ -218,3 +218,19 @@
 
 (defmethod engine/run-node "SetSessionPropertiesNode" [{:keys [config]}]
   {:outcome "outcome" :props (into {} (map (fn [[k v]] [(name k) (str v)]) (:properties config)))})
+
+;; ---- zero page login -----------------------------------------------------------------------
+
+(defmethod engine/run-node "ZeroPageLoginNode" [{:keys [config session]}]
+  (let [header (fn [name] (get-in session [:request :headers (str/lower-case name)]))
+        users (header (or (:usernameHeader config) "X-OpenAM-Username"))
+        passwords (header (or (:passwordHeader config) "X-OpenAM-Password"))
+        referer (first (header "Referer"))
+        referer-ok? (or (not (false? (:allowWithoutReferer config)))
+                        (and referer (some #{referer} (:referrerWhiteList config))))]
+    (cond
+      (not (and (seq users) (seq passwords) referer-ok?)) {:outcome "noCredentials"}
+      (or (next users) (next passwords))
+      {:error (str "Expecting only one header value for username and/or password but size is "
+                   (max (count users) (count passwords)) ".")}
+      :else {:outcome "hasCredentials" :shared {"username" (first users)} :transient {"password" (first passwords)}})))
