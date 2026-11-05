@@ -19,7 +19,7 @@
          :cookieName (:cookie-name opts) :secureCookie false :forgotPassword "false" :forgotUsername "false"
          :kbaEnabled "false" :selfRegistration "false" :lang "en-US" :successfulUserRegistrationDestination "default"
          :socialImplementations [] :referralsEnabled "false"
-         :zeroPageLogin {:enabled false :refererWhitelist [] :allowedWithoutReferer true}
+         :zeroPageLogin {:enabled true :refererWhitelist [] :allowedWithoutReferer true}
          :realm "/" :xuiUserSessionValidationEnabled true :fileBasedConfiguration true :userIdAttributes []
          :cloudOnlyFeaturesEnabled true}
     "version" {:_id "version" :_rev "0" :version "8.0.1"
@@ -57,8 +57,10 @@
 (defn- b64 [s] (.encodeToString (Base64/getEncoder) (.getBytes (str s) "UTF-8")))
 (defn- unb64 [s] (String. (.decode (Base64/getDecoder) ^String s) "UTF-8"))
 
-(defn- variable [id value]
-  {:_id id :valueBase64 (b64 value) :expressionType "string" :description "" :loaded true
+(defn- variable
+  "One ESV as the API shows it; `meta` (description, expressionType) is what the export or the last PUT said."
+  [id value meta]
+  {:_id id :valueBase64 (b64 value) :expressionType (or (:expressionType meta) "string") :description (or (:description meta) "") :loaded true
    :lastChangeDate (str (java.time.Instant/now)) :lastChangedBy "sling"})
 
 (defn environment
@@ -72,16 +74,17 @@
       "variables"
       (cond
         (and (nil? id) (= m "GET"))
-        (let [vs (for [[k val] (sort esv)] (variable (str/replace k "." "-") val))]
+        (let [vs (for [[k val] (sort esv)] (variable (str/replace k "." "-") val (get-in @tenant [:services :esv-meta (str/replace k "." "-")])))]
           (web/json 200 {:result (vec vs) :resultCount (count vs) :pagedResultsCookie nil
                          :totalPagedResultsPolicy "NONE" :totalPagedResults -1 :remainingPagedResults -1}))
-        (= m "GET") (if-some [val (get esv (esv-key id))] (web/json 200 (variable id val)) (web/error 404 (str "variable " id " not found")))
+        (= m "GET") (if-some [val (get esv (esv-key id))] (web/json 200 (variable id val (get-in @tenant [:services :esv-meta id]))) (web/error 404 (str "variable " id " not found")))
         (= m "PUT") (let [b (web/json-body req)
                           val (if (:valueBase64 b) (unb64 (:valueBase64 b)) (:value b))]
-                      (swap! tenant assoc-in [:services :esv (esv-key id)] val)
-                      (web/json 200 (variable id val)))
+                      (swap! tenant (fn [t] (-> t (assoc-in [:services :esv (esv-key id)] val)
+                                                (assoc-in [:services :esv-meta id] (select-keys b [:description :expressionType])))))
+                      (web/json 200 (variable id val (select-keys b [:description :expressionType]))))
         (= m "DELETE") (if-some [val (get esv (esv-key id))]
-                         (do (swap! tenant update-in [:services :esv] dissoc (esv-key id)) (web/json 200 (variable id val)))
+                         (do (swap! tenant update-in [:services :esv] dissoc (esv-key id)) (web/json 200 (variable id val nil)))
                          (web/error 404 (str "variable " id " not found")))
         :else (web/error 405 m))
       "secrets"

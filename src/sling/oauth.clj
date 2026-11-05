@@ -4,7 +4,8 @@
 
     GET  /am/oauth2[/realms/root/realms/<r>]/.well-known/openid-configuration
     GET  .../connect/jwk_uri
-    GET|POST .../authorize            response_type=code, PKCE plain/S256, needs the SSO cookie
+    GET|POST .../authorize            response_type=code (PKCE plain/S256) or token (implicit: the client needs the
+                                      implicit grant), needs the SSO cookie
     POST .../access_token             client_credentials, password, authorization_code, refresh_token,
                                       jwt-bearer (service accounts, root realm, as Frodo logs in)
     POST .../introspect               RFC 7662 plus the platform's extra fields
@@ -323,7 +324,9 @@
     (cond
       (nil? client) (web/error 400 (str "unknown client_id " (pr-str (p "client_id"))))
       (not (some #{redirect} (:redirect-uris client))) (web/error 400 (str "redirect_uri " (pr-str redirect) " is not registered for " (:id client)))
-      (not= "code" (p "response_type")) (back {:error "unsupported_response_type" :error_description "only response_type=code here"})
+      (not (#{"code" "token"} (p "response_type"))) (back {:error "unsupported_response_type" :error_description "only response_type=code and token here"})
+      (and (= "token" (p "response_type")) (not (some #{"implicit"} (:grant-types client))))
+      (back {:error "unauthorized_client" :error_description (str "client " (:id client) " may not use the implicit grant")})
       (nil? session)
       (if (= "none" (p "prompt"))
         (back {:error "login_required" :error_description "no session"})
@@ -331,12 +334,18 @@
                            (web/url-encode (str (issuer srv realm) "/authorize?" (web/query-string (update-vals (web/form req) first)))))))
       :else
       (if-let [scope (grant-scope (:scopes client) (:default-scopes client) (p "scope"))]
-        (let [code (rand-id)]
-          (swap! codes assoc code {:client (:id client) :redirect-uri redirect :scope scope :sub (:user-id session)
-                                   :user (:user session) :auth-time (:auth-time session) :nonce (p "nonce")
-                                   :challenge (p "code_challenge") :method (p "code_challenge_method")
-                                   :exp (+ (jwt/now) 120)})
-          (back {:code code}))
+        (if (= "token" (p "response_type"))
+          ;; the implicit grant: the token itself, in the fragment of the redirect
+          (let [t (issue srv {:client client :realm realm :sub (:user-id session) :subname (:user-id session) :scope scope
+                              :grant "implicit" :auth-time (:auth-time session) :nonce (p "nonce") :user (:user session)})]
+            (web/redirect (str redirect "#" (web/query-string (assoc (select-keys t [:access_token :token_type :expires_in :scope])
+                                                                     :state (p "state") :iss (issuer srv realm))))))
+          (let [code (rand-id)]
+            (swap! codes assoc code {:client (:id client) :redirect-uri redirect :scope scope :sub (:user-id session)
+                                     :user (:user session) :auth-time (:auth-time session) :nonce (p "nonce")
+                                     :challenge (p "code_challenge") :method (p "code_challenge_method")
+                                     :exp (+ (jwt/now) 120)})
+            (back {:code code})))
         (back {:error "invalid_scope" :error_description "Unknown/invalid scope(s)"})))))
 
 ;; ---- introspect, userinfo, revoke, discovery -----------------------------------------------
@@ -382,9 +391,9 @@
      :userinfo_endpoint (str i "/userinfo") :introspection_endpoint (str i "/introspect")
      :revocation_endpoint (str i "/token/revoke") :jwks_uri (str i "/connect/jwk_uri")
      :end_session_endpoint (str i "/connect/endSession")
-     :response_types_supported ["code"] :subject_types_supported ["public"]
+     :response_types_supported ["code" "token"] :subject_types_supported ["public"]
      :id_token_signing_alg_values_supported ["RS256"]
-     :grant_types_supported ["client_credentials" "password" "authorization_code" "refresh_token"
+     :grant_types_supported ["client_credentials" "password" "authorization_code" "implicit" "refresh_token"
                              "urn:ietf:params:oauth:grant-type:jwt-bearer"]
      :token_endpoint_auth_methods_supported ["client_secret_basic" "client_secret_post" "private_key_jwt" "none"]
      :code_challenge_methods_supported ["plain" "S256"]

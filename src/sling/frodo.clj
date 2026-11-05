@@ -79,6 +79,9 @@
                    [(:_id m) (script-entry f m)])
                  (for [[f _ j] journeys, [_ m] (:scripts j) :when (:script m)]
                    [(:_id m) (script-entry f m)]))
+        esv-meta (for [f (files-ending root ".variable.json") :when (keep? f)
+                       [id v] (:variable (read-json f))]
+                   [(clojure.core/name id) (select-keys v [:description :expressionType])])
         variables (for [f (files-ending root ".variable.json") :when (keep? f)
                         [id v] (:variable (read-json f))]
                     [(str/replace (clojure.core/name id) "-" ".")
@@ -121,7 +124,7 @@
                                 :let [id (subs (str id) 1)]
                                 :when (not (or (str/starts-with? id "endpoint/") (#{"sync" "managed"} id)))]
                             [id cfg]))
-     :services {:esv (into {} variables) :default-journey "Login"}}))
+     :services {:esv (into {} variables) :esv-meta (into {} esv-meta) :default-journey "Login"}}))
 
 (defn provenance
   "Which file each thing came from, for writing it back: {:tree {name f} :script {id f}
