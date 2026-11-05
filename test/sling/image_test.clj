@@ -23,7 +23,7 @@
        (catch Exception e (str "no podman: " (.getMessage e)))))
 
 (defn- free-port [] (with-open [s (ServerSocket. 0)] (.getLocalPort s)))
-(defn- abs [p] (.getAbsolutePath (io/file p)))
+(defn- abspath [p] (.getAbsolutePath (io/file p)))
 (def ^:private http (HttpClient/newHttpClient))
 
 (defn- request [method url & {:keys [headers form]}]
@@ -47,7 +47,7 @@
   (let [name (str "sling-test-" (Long/toString (System/nanoTime) 36))
         port (free-port)
         run (apply podman "run" "-d" "--name" name "-p" (str "127.0.0.1:" port ":8090")
-                   (concat (mapcat (fn [[from to]] ["-v" (str (abs from) ":" to ":ro,z")]) mounts) [image] args))]
+                   (concat (mapcat (fn [[from to]] ["-v" (str (abspath from) ":" to ":ro,z")]) mounts) [image] args))]
     (when-not (zero? (:exit run)) (throw (ex-info (str "podman run failed: " (:err run)) run)))
     (try (let [base (str "http://127.0.0.1:" port)] (wait-ready! base) (f base))
          (finally (podman "rm" "-f" name)))))
