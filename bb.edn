@@ -1,7 +1,7 @@
 {:tasks
  {serve     {:doc "Start the fake tenant: bb serve [port] [tenant-dir] | --frodo <export> --services <edn> --bind 0.0.0.0 --public-url <url> --modules oauth,idm,am,esv,journeys --token-format jwt|opaque"
              :task (apply shell "clojure" "-M:icf" "-m" "sling.server" *command-line-args*)}
-  image     {:doc "Build localhost/sling:<VERSION>: the uberjar (with the :icf deps) on eclipse-temurin:21-jre, podman. It serves a Frodo export mounted at /tenant on 8090 with --public-url http://fakeping.localhost:8090"
+  image     {:doc "Build localhost/sling:<VERSION>: the uberjar (with the :icf deps) on eclipse-temurin:21-jre, podman. It serves a Frodo export mounted at /tenant on 8090 with --public-url http://sling.localhost:8090"
              :task (load-file "bb/image.bb")}
   hrdb:up   {:doc "Start the HR database (Postgres in podman) the HRDB connector fixture writes to"
              :task (shell "bb" "bb/hrdb.bb" "up")}

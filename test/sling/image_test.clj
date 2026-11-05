@@ -12,7 +12,7 @@
            (java.net.http HttpClient HttpRequest HttpRequest$BodyPublishers HttpResponse$BodyHandlers)))
 
 (def image (str "localhost/sling:" (str/trim (slurp "VERSION"))))
-(def public-url "http://fakeping.localhost:8090")
+(def public-url "http://sling.localhost:8090")
 (def issuer (str public-url "/am/oauth2/realms/root/realms/alpha"))
 
 (defn- podman [& args] (apply sh "podman" args))
