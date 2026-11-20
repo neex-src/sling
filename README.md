@@ -1,14 +1,16 @@
 # sling
 
-A fake Ping Identity cloud tenant (PingOne Advanced Identity Cloud, which used to be ForgeRock
-Identity Cloud) that runs on your machine.
+All the code here is written by AI (Claude Code) and has not been reviewed.
 
-It answers on the same URLs as the real tenant, on one port. Point a service, a Lambda, a browser
-or Frodo at it by changing the base URL and nothing else: login journeys, OAuth2 and OIDC tokens,
-IDM users, environment variables and secrets work like on the tenant. Mails, SMS and one-time codes
-don't go out, they land in an outbox you can read.
+A fake Ping Identity cloud tenant (PingOne Advanced Identity Cloud, formerly ForgeRock Identity
+Cloud), running locally on one port.
 
-Good for tests and local runs that need a tenant, without a real one.
+It serves the URLs of the real tenant: login journeys, OAuth2 and OIDC tokens, IDM users,
+environment variables and secrets. Point a service, a Lambda, a browser or Frodo at its base URL.
+Mails, SMS and one-time codes are not sent; they go to an outbox you can read.
+
+Not everything of the real tenant is there. `bb coverage <export>` shows how much of a given Frodo
+export runs.
 
 ## What you need
 
@@ -35,8 +37,8 @@ containers), `--token-format jwt|opaque`, `--write true` (changes go back into t
 | esv      | `/environment/variables`, `/environment/secrets` |
 | dev      | `/sling/outbox` (mails, SMS, codes, resume links), `/sling/sync` |
 
-A call into a part that is off answers 404 and names the part, so a hidden dependency shows at once.
-Send `X-Sling-Debug: true` on `/authenticate` to get the reason and the trace of the nodes.
+A call into a part that is off answers 404 with the name of the part. `X-Sling-Debug: true` on
+`/authenticate` returns the reason and the trace of the nodes.
 
 ## Other commands
 
